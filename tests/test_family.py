@@ -1,0 +1,144 @@
+"""Features added for the CHCE family: verify, manifest digest, doctor, bench, engines."""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+import struct
+
+import pytest
+
+from kosh.core import bench, doctor, engine, pack, verify
+from kosh.core.util import KoshError
+
+
+@pytest.fixture()
+def container(tmp_path):
+    src = tmp_path / "notes.txt"
+    src.write_bytes(b"a verifiable payload\n" * 4000)
+    out = tmp_path / "c.kosh"
+    pack.pack([str(src)], str(out), codec="zstd", level=6)
+    return out
+
+
+def test_container_is_version_two_with_manifest_digest(container):
+    toc = pack.read_toc(str(container))
+    assert toc["version"] == 2
+    assert toc["manifest_sha256"] == pack.manifest_digest(toc)
+
+
+def test_tampered_manifest_is_rejected(container, tmp_path):
+    data = bytearray(container.read_bytes())
+    # Flip a byte inside the JSON table of contents, not the payload.
+    marker = data.find(b'"notes.txt"')
+    assert marker > 0
+    data[marker + 1] = ord("N")
+    container.write_bytes(bytes(data))
+    with pytest.raises(KoshError, match="manifest digest"):
+        pack.read_toc(str(container))
+
+
+def test_verify_container_ok(container):
+    result = pack.verify_container(str(container))
+    assert result.ok and result.manifest_verified and result.entries == 1
+
+
+def test_verify_container_detects_payload_damage(container):
+    data = bytearray(container.read_bytes())
+    data[-40] ^= 0xFF  # inside the last block, before the TOC
+    container.write_bytes(bytes(data))
+    result = pack.verify_container(str(container))
+    assert not result.ok
+
+
+def test_verify_dispatch_and_quick_mode(container):
+    result = verify.verify(str(container), deep=False)
+    assert result["kind"] == "kosh" and result["ok"]
+
+
+def test_verify_split_set(tmp_path):
+    from kosh.core import splitjoin
+    src = tmp_path / "big.bin"
+    src.write_bytes(os.urandom(300_000))
+    result = splitjoin.split(str(src), str(tmp_path / "parts"), parts=3)
+    good = verify.verify(result.manifest)
+    assert good["kind"] == "kosh-split" and good["ok"]
+    with open(result.parts[0], "r+b") as fh:
+        fh.write(b"corrupt")
+    bad = verify.verify(result.manifest)
+    assert not bad["ok"] and any("checksum" in p for p in bad["problems"])
+
+
+def test_verify_zip(tmp_path):
+    import zipfile
+    path = tmp_path / "a.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("a.txt", "hello")
+    assert verify.verify(str(path))["ok"]
+
+
+def test_doctor_reports_a_real_round_trip():
+    report = doctor.run(quick=True)
+    names = {c["name"]: c for c in report["checks"]}
+    assert report["ok"]
+    assert names["round-trip"]["ok"]
+    assert "verified" in names["round-trip"]["detail"]
+
+
+def test_bench_is_deterministic_and_has_a_baseline(tmp_path):
+    first = bench.run()
+    second = bench.run()
+    sizes = lambda r: [[row["stored"] for row in item["rows"]] for item in r["results"]]
+    assert sizes(first) == sizes(second)
+    codecs = {row["codec"] for item in first["results"] for row in item["rows"]}
+    assert {"gzip -9", "xz -9", "kosh zstd 19"} <= codecs
+    assert "| file |" in bench.markdown(first)
+
+
+def test_chce_header_is_parsed():
+    def varint(value: int) -> bytes:
+        out = bytearray()
+        while True:
+            byte = value & 0x7F
+            value >>= 7
+            out.append(byte | (0x80 if value else 0))
+            if not value:
+                return bytes(out)
+
+    head = b"CHCE" + bytes([1, 0]) + varint(123456) + varint(7)
+    parsed = engine.read_chce_header(head)
+    assert parsed["version"] == 1 and parsed["original_size"] == 123456
+    assert parsed["block_count"] == 7 and parsed["decoder"] == "ziptastic"
+
+
+def test_engine_pack_spawns_a_binary(tmp_path, monkeypatch):
+    """A stand-in engine proves the process boundary works without ziptastic installed."""
+    fake = tmp_path / "bin" / "ziptastic"
+    fake.parent.mkdir()
+    fake.write_text(
+        "#!/bin/sh\n"
+        "set -e\n"
+        "src=\"$2\"\n"
+        "case \"$1\" in\n"
+        "  c) if [ -d \"$src\" ]; then out=\"${src%/}.dr\"; tar -cf - -C \"$src\" . | gzip -9 > \"$out\";\n"
+        "     else out=\"$src.dr\"; gzip -9 < \"$src\" > \"$out\"; fi ;;\n"
+        "  *) exit 2 ;;\n"
+        "esac\n"
+        "echo compressed\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+
+    src = tmp_path / "input.txt"
+    src.write_bytes(b"engine boundary test\n" * 500)
+    out = tmp_path / "input.dr"
+    info = engine.pack_with_engine("ziptastic", [str(src)], str(out))
+    assert out.exists() and out.stat().st_size > 0
+    assert info["engine"] == "ziptastic"
+
+
+def test_engine_missing_binary_says_so(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", "/nonexistent")
+    with pytest.raises(KoshError, match="not on PATH"):
+        engine.pack_with_engine("ziptastic", [str(tmp_path)], str(tmp_path / "x.dr"))

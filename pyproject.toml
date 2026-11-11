@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kosh"
+version = "1.1.0"
+description = "One toolkit for splitting, squeezing, archiving and inspecting files"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kosh contributors" }]
+keywords = ["compression", "zopfli", "png", "zip", "split", "archive", "cli"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Archiving :: Compression",
+]
+dependencies = [
+  "typer>=0.9",
+  "rich>=13",
+  "zstandard>=0.22",
+  "brotli>=1.1",
+  "zopfli>=0.2",
+  "numpy>=1.24",
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pillow>=10"]
+
+[project.scripts]
+kosh = "kosh.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kosh*"]
+
+[tool.setuptools.package-data]
+"kosh.ui" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

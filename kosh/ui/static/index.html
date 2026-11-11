@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kosh — one toolkit for files</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%2322c55e'/><path d='M11 8v16M21 8l-8 8 8 8' stroke='%23061009' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="30" height="30">
+        <rect width="32" height="32" rx="9" fill="url(#g)"/>
+        <path d="M11 8v16M21 8l-8 8 8 8" stroke="#04140a" stroke-width="3.4" fill="none"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="32">
+          <stop stop-color="#5eead4"/><stop offset="1" stop-color="#22c55e"/>
+        </linearGradient></defs>
+      </svg>
+    </div>
+    <div>
+      <h1>Kosh</h1>
+      <p>split · squeeze · archive · inspect</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="pill"><span class="dot"></span> runs on your machine</span>
+    <span class="version" id="version">v1.0</span>
+  </div>
+</header>
+
+<main class="shell">
+  <nav class="rail" aria-label="Operations">
+    <button class="op is-active" data-op="optimize">
+      <svg viewBox="0 0 24 24"><path d="M4 15l5-5 4 4 7-7M20 7h-5m5 0v5"/></svg>
+      <span>Optimise</span><em>PNG · ZIP · GZIP</em>
+    </button>
+    <button class="op" data-op="pack">
+      <svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4M12 11v10"/></svg>
+      <span>Pack</span><em>.kosh container</em>
+    </button>
+    <button class="op" data-op="unpack">
+      <svg viewBox="0 0 24 24"><path d="M12 3v11m0 0l-4-4m4 4l4-4M4 17v3h16v-3"/></svg>
+      <span>Unpack</span><em>restore verified</em>
+    </button>
+    <button class="op" data-op="split">
+      <svg viewBox="0 0 24 24"><path d="M4 6h6v12H4zM14 6h6v12h-6zM10 12h4"/></svg>
+      <span>Split</span><em>parts + manifest</em>
+    </button>
+    <button class="op" data-op="join">
+      <svg viewBox="0 0 24 24"><path d="M4 6h6v12H4zM14 6h6v12h-6z"/><path d="M11 12h2" stroke-dasharray="1 3"/></svg>
+      <span>Join</span><em>verify checksums</em>
+    </button>
+    <button class="op" data-op="archive">
+      <svg viewBox="0 0 24 24"><path d="M3 7h18v13H3zM3 7l2-3h14l2 3M10 11h4"/></svg>
+      <span>Archive</span><em>zip · tar · zst</em>
+    </button>
+    <button class="op" data-op="verify">
+      <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Verify</span><em>integrity check</em>
+    </button>
+    <button class="op" data-op="inspect">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
+      <span>Inspect</span><em>what is this?</em>
+    </button>
+  </nav>
+
+  <section class="stage">
+    <div class="intro">
+      <h2 id="op-title">Optimise files</h2>
+      <p id="op-hint">Re-compress PNG, ZIP, GZIP and JPEG losslessly — smaller bytes, identical content.</p>
+    </div>
+
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add files">
+      <input type="file" id="picker" multiple hidden>
+      <input type="file" id="folder-picker" webkitdirectory directory multiple hidden>
+      <div class="drop-inner">
+        <svg class="drop-icon" viewBox="0 0 24 24" width="34" height="34">
+          <path d="M12 16V4m0 0L7 9m5-5l5 5M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/>
+        </svg>
+        <p><strong>Drop files here</strong> or <button class="link" id="browse">browse</button></p>
+        <p class="muted">or <button class="link" id="browse-folder">choose a folder</button> — nothing leaves this machine</p>
+      </div>
+    </div>
+
+    <div class="files" id="files" hidden>
+      <div class="files-head">
+        <span id="file-count">0 files</span>
+        <span class="muted" id="file-size"></span>
+        <button class="ghost" id="clear">clear</button>
+      </div>
+      <ul id="file-list"></ul>
+    </div>
+
+    <form class="options" id="options" onsubmit="return false"></form>
+
+    <div class="actions">
+      <button class="run" id="run" disabled>
+        <span class="run-label">Run</span>
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14m0 0l-6-6m6 6l-6 6"/></svg>
+      </button>
+      <span class="muted" id="run-note">Add a file to start</span>
+    </div>
+
+    <div class="progress-wrap" id="progress-wrap" hidden>
+      <div class="progress-head">
+        <span id="progress-msg">working…</span>
+        <span class="mono" id="progress-pct">0%</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="bar"></div></div>
+    </div>
+
+    <div class="result" id="result" hidden></div>
+    <div class="error" id="error" hidden></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>Kosh v1.0 · a modern rebuild of DeflOpt, ECT, WABBIE, SplitSat and WinRK</span>
+  <span class="mono">localhost</span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
