@@ -62,7 +62,21 @@ def _read_varint(buf: bytes, pos: int) -> tuple[int, int]:
 
 
 def read_chce_header(head: bytes) -> dict:
-    """Parse just enough of a CHCE stream to describe it (docs/FORMAT.md)."""
+    """Parse just enough of a CHCE stream to describe it.
+
+    The layout is version-dependent and this follows ziptastic's
+    `docs/FORMAT.md` §"Stream layout", which is normative:
+
+        v8: "CHCE" | version u8 | flags u8 | layers u8 | layers2 u8 | layers3 u8
+            | original_size varint | true_size varint | block_count varint
+            | crc32 u32
+
+    The fields arrived over time — crc32 in v2, `layers` in v3, `layers2` in v5,
+    `true_size` in v6, `layers3` in v7 — so reading a v8 stream as if it were v1
+    is not a small error: the three layer bytes land where `original_size` is
+    expected, every field after them shifts, and the result reads 0 blocks for a
+    one-block stream. That is what this used to do.
+    """
     if not head.startswith(CHCE_MAGIC):
         raise KoshError("not a CHCE stream")
     if len(head) < 6:
@@ -70,11 +84,28 @@ def read_chce_header(head: bytes) -> dict:
     version = head[4]
     flags = head[5]
     pos = 6
+
+    layer_bytes = 3 if version >= 7 else 2 if version >= 5 else 1 if version >= 3 else 0
+    if len(head) < pos + layer_bytes:
+        raise KoshError("CHCE header ends before the layer bytes")
+    layers = list(head[pos:pos + layer_bytes])
+    pos += layer_bytes
+
     original_size, pos = _read_varint(head, pos)
+    true_size = original_size
+    if version >= 6:
+        true_size, pos = _read_varint(head, pos)
     block_count, pos = _read_varint(head, pos)
+    crc32 = None
+    if version >= 2 and len(head) >= pos + 4:
+        (crc32,) = struct.unpack("<I", head[pos:pos + 4])
+        pos += 4
+
     return {
         "kind": "chce-stream", "version": version, "flags": flags,
-        "original_size": original_size, "block_count": block_count,
+        "layers": " ".join(f"0x{b:02x}" for b in layers) or "none",
+        "original_size": original_size, "true_size": true_size,
+        "block_count": block_count, "crc32": f"0x{crc32:08x}" if crc32 is not None else "none",
         "decoder": "ziptastic",
     }
 
