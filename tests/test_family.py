@@ -142,3 +142,49 @@ def test_engine_missing_binary_says_so(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", "/nonexistent")
     with pytest.raises(KoshError, match="not on PATH"):
         engine.pack_with_engine("ziptastic", [str(tmp_path)], str(tmp_path / "x.dr"))
+
+
+# --- the CHCE header, read the way ziptastic writes it ------------------------
+#
+# The first 20 bytes of a real v8 stream, produced by ziptastic 1.4.1:
+#   magic | version 8 | flags 0x40 | layers 0,0,0 | original 643340 |
+#   true 645120 | blocks 1 | crc32 0x46ac486d
+REAL_V8_HEADER = bytes.fromhex("4348434508400000008ca22780b027016d48ac46")
+
+
+def test_chce_header_is_read_with_the_layer_bytes_skipped():
+    """A v8 header read as if it were v1 reports 0 blocks for a one-block stream."""
+    header = engine.read_chce_header(REAL_V8_HEADER)
+    assert header["version"] == 8
+    assert header["flags"] == 0x40
+    assert header["layers"] == "0x00 0x00 0x00"
+    assert header["original_size"] == 643340
+    assert header["true_size"] == 645120
+    assert header["block_count"] == 1
+    assert header["crc32"] == "0x46ac486d"
+
+
+def test_chce_header_of_an_older_version_skips_only_its_own_bytes():
+    # v3: one layer byte, no true_size, no layers2/3 — original 300, 2 blocks.
+    v3 = bytes.fromhex("43484345") + bytes([3, 0, 0x02]) + bytes([0xAC, 0x02, 0x02])
+    header = engine.read_chce_header(v3)
+    assert header["layers"] == "0x02"
+    assert header["original_size"] == 300
+    assert header["true_size"] == 300
+    assert header["block_count"] == 2
+
+
+def test_verify_does_not_claim_a_checked_stream_for_a_chce_file(tmp_path):
+    """`pack --engine ziptastic` writes a CHCE stream, not a container.
+
+    verify used to fall through to the generic branch and report "intact" — a
+    hash with nothing to compare against — while unpack/info/ls refused the file
+    as "not a Kosh container". It must say what it actually checked.
+    """
+    stream = tmp_path / "payload.dr"
+    stream.write_bytes(REAL_V8_HEADER + b"\x00" * 32)
+    result = verify.verify(str(stream))
+    assert result["kind"] == "chce-stream"
+    assert result["checked"] == "header only"
+    assert result["entries"] == 1
+    assert "ziptastic" in result["note"]

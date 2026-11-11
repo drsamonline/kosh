@@ -505,8 +505,18 @@ def verify(
     if "manifest_verified" in result:
         table.add_row("manifest digest", "[green]verified[/]" if result["manifest_verified"]
                       else "[dim]not present (v1)[/]")
-    table.add_row("integrity", "[green]intact[/]" if result["ok"] else "[red]damaged[/]")
+    # Say what was actually checked. "intact" from a hash nobody compared to
+    # anything, or from a header that merely parsed, is the kind of assurance
+    # this project does not give elsewhere.
+    checked = result.get("checked")
+    label = "intact" if result["ok"] else "damaged"
+    if checked:
+        label = f"{label} ({checked})"
+    colour = "green" if result["ok"] else "red"
+    table.add_row("integrity", f"[{colour}]{label}[/]")
     console.print(table)
+    if result.get("note"):
+        console.print(f"  [dim]{result['note']}[/]")
     for problem in result["problems"]:
         console.print(f"  [red]✗[/] {problem}")
     if not result["ok"]:

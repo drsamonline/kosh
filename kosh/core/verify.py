@@ -13,6 +13,7 @@ import tarfile
 import time
 import zipfile
 
+from . import engine as engine_mod
 from . import pack as pack_mod
 from . import splitjoin
 from .util import KoshError, ProgressFn, hash_file, human_size
@@ -29,7 +30,7 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> 
         raise KoshError("verify takes a file; point it at a container or an archive")
 
     with open(path, "rb") as fh:
-        head = fh.read(16)
+        head = fh.read(64)
 
     if head.startswith(pack_mod.START_MAGIC):
         result = pack_mod.verify_container(path, deep=deep, progress=progress)
@@ -38,6 +39,9 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> 
             "bytes": result.bytes, "manifest_verified": result.manifest_verified,
             "problems": result.problems, "seconds": round(result.seconds, 2),
         }
+
+    if head.startswith(engine_mod.CHCE_MAGIC):
+        return _verify_chce(path, head)
 
     if path.endswith(splitjoin.MANIFEST_SUFFIX):
         return _verify_split(path, progress)
@@ -52,7 +56,41 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> 
     return {
         "path": path, "kind": "file", "ok": True, "entries": 1,
         "bytes": os.path.getsize(path), "sha256": digest,
-        "problems": [], "note": "no container to check; the hash is the evidence",
+        "problems": [], "checked": "hash only",
+        "note": "no container to check; the hash is the evidence",
+    }
+
+
+def _verify_chce(path: str, head: bytes) -> dict:
+    """A CHCE stream is the engine's file, not a Kosh container.
+
+    `pack --engine ziptastic` writes one, so this is a file Kosh produced. It used
+    to fall through to the generic branch and report "intact" — which was a hash
+    with nothing to compare it against, and read as if the stream had been
+    checked. The block digests are only verified by decoding, which needs the
+    engine; `unpack --engine` (roadmap EN-2) does not exist yet.
+    """
+    try:
+        header = engine_mod.read_chce_header(head)
+    except KoshError as exc:
+        return {
+            "path": path, "kind": "chce-stream", "ok": False, "entries": 0,
+            "bytes": os.path.getsize(path), "problems": [str(exc)],
+            "checked": "header only",
+        }
+
+    installed = any(e.name == "ziptastic" and e.available for e in engine_mod.find_engines())
+    note = (
+        "block digests are verified by decoding: run `ziptastic d` (the engine is on PATH)"
+        if installed else
+        "install ziptastic to decode and verify this stream"
+    )
+    return {
+        "path": path, "kind": "chce-stream", "ok": True,
+        "entries": header["block_count"], "bytes": os.path.getsize(path),
+        "problems": [], "checked": "header only", "note": note,
+        "chce": {"version": header["version"], "flags": header["flags"],
+                 "original_size": header["original_size"]},
     }
 
 
