@@ -33,6 +33,23 @@ jobs:
       - name: Tests
         run: pytest -q
 
+      - name: The badge matches the suite that just ran
+        # The comment at the top of this file has promised this step since the
+        # first commit; it was never there. The badge is drawn by tools/badges.py
+        # from a count someone passed in, so without this it can drift from the
+        # suite by exactly the amount nobody notices.
+        run: |
+          # --collect-only -q prints a count per file, not a total, so sum them.
+          collected="$(pytest -q --collect-only 2>/dev/null | grep -E ': [0-9]+$' | awk -F': ' '{s+=$2} END{print s+0}')"
+          badge="$(grep -oE 'tests: [0-9]+ passed' docs/assets/badge-tests.svg | grep -oE '[0-9]+' | head -1)"
+          echo "collected: ${collected:-<none>}"
+          echo "badge:     ${badge:-<none>}"
+          test -n "$collected"
+          test "$collected" = "$badge" || {
+            echo "::error::docs/assets/badge-tests.svg says $badge tests, the suite collects $collected. Regenerate with: python tools/badges.py tests $collected"
+            exit 1
+          }
+
       - name: CLI smoke
         run: |
           kosh version

@@ -31,7 +31,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pillow>=10"]
+# httpx2 is not optional: starlette 1.x builds its TestClient on it and raises
+# at import time without it, so `pytest` cannot even collect tests/test_api.py.
+# It is a dev-only need — nothing in kosh/ imports it.
+dev = ["pytest>=8", "pillow>=10", "httpx2>=2"]
 
 [project.scripts]
 kosh = "kosh.cli:main"
