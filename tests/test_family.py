@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import struct
+import sys
 
 import pytest
 
@@ -188,3 +189,58 @@ def test_verify_does_not_claim_a_checked_stream_for_a_chce_file(tmp_path):
     assert result["checked"] == "header only"
     assert result["entries"] == 1
     assert "ziptastic" in result["note"]
+
+
+def test_engine_unpack_is_the_mirror_of_engine_pack(tmp_path, monkeypatch):
+    """Pack with a stand-in engine, unpack with it, get the bytes back.
+
+    EN-2 in the roadmap: packing without unpacking is half a boundary. The
+    stand-in writes a real 16-byte CHCE v8 header (one-byte varints) and gzips the
+    payload, so the size check against true_size has something to check.
+    """
+    fake = tmp_path / "bin" / "ziptastic"
+    fake.parent.mkdir()
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import gzip, sys\n"
+        "verb, src = sys.argv[1], sys.argv[2]\n"
+        "if verb == 'c':\n"
+        "    data = open(src, 'rb').read()\n"
+        "    head = b'CHCE' + bytes([8, 0x40, 0, 0, 0, len(data), len(data), 1]) + b'\\0' * 4\n"
+        "    open(src + '.dr', 'wb').write(head + gzip.compress(data, 9))\n"
+        "elif verb == 'd':\n"
+        "    raw = open(src, 'rb').read()[16:]\n"
+        "    out = src[:-3] if src.endswith('.dr') else src + '.out'\n"
+        "    open(out, 'wb').write(gzip.decompress(raw))\n"
+        "else:\n"
+        "    sys.exit(2)\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+
+    src = tmp_path / "input.txt"
+    src.write_bytes(b"engine boundary\n" * 5)   # 80 bytes
+    stream = tmp_path / "input.dr"
+    engine.pack_with_engine("ziptastic", [str(src)], str(stream))
+
+    out = tmp_path / "restored"
+    result = engine.unpack_with_engine("ziptastic", str(stream), str(out))
+    assert out.read_bytes() == src.read_bytes()
+    assert result["bytes"] == 80
+    assert result["block_count"] == 1
+    assert result["engine"] == "ziptastic"
+
+
+def test_engine_unpack_refuses_a_file_that_is_not_a_stream(tmp_path):
+    not_a_stream = tmp_path / "payload.bin"
+    not_a_stream.write_bytes(b"just bytes, no magic")
+    with pytest.raises(KoshError, match="not a CHCE stream"):
+        engine.unpack_with_engine("ziptastic", str(not_a_stream), str(tmp_path / "out"))
+
+
+def test_engine_unpack_without_the_engine_names_it(tmp_path, monkeypatch):
+    stream = tmp_path / "x.dr"
+    stream.write_bytes(REAL_V8_HEADER + b"\x00" * 16)
+    monkeypatch.setenv("PATH", "/nonexistent")
+    with pytest.raises(KoshError, match="not on PATH"):
+        engine.unpack_with_engine("ziptastic", str(stream), str(tmp_path / "out"))

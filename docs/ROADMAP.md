@@ -192,10 +192,15 @@ family, not a preference of the author.
 ## Status of the repository today
 
 - **Done:** 1.0 (engine, CLI, UI, 31 tests), 1.1 (verify, info, doctor, bench,
-  manifest digest, CHCE detection, engine delegation, 43 tests).
-- **Known gaps, honestly:** no Windows or macOS run, no real engine round-trip,
-  Zopfli is the slow path on anything above 1 MB, the UI forgets a job when the
-  tab closes, and the landing page is not published.
-- **Next three, in order:** CT-1 (Windows CI), EN-1 (real ziptastic round-trip),
-  CT-11 (`check-claims.py`). The first two are about being *true*; the third is
-  about staying true.
+  manifest digest, CHCE detection, engine delegation, 43 tests), and the two
+  items that made the delegation true: **EN-1** (a CI job that fetches the
+  published ziptastic binary, checks it against its own `SHA256SUMS`, and asserts
+  Kosh and ziptastic read the same header) and **EN-2** (`unpack --engine`, so
+  what `pack --engine` writes can be read back). 49 tests.
+- **Known gaps, honestly:** no Windows or macOS run, Zopfli is the slow path on
+  anything above 1 MB, the UI forgets a job when the tab closes, the landing page
+  is not published, and an engine stream still cannot be listed or inspected
+  without decoding it (EN-4).
+- **Next three, in order:** CT-1 (Windows CI), CT-11 (`check-claims.py`), EN-4
+  (`.dr` block table in `info`). The first is about being *true* elsewhere; the
+  other two are about staying true.

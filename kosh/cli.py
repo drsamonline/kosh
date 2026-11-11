@@ -232,14 +232,47 @@ def pack(
 @app.command()
 @handle
 def unpack(
-    container: str = typer.Argument(..., help="A .kosh container."),
+    container: str = typer.Argument(..., help="A .kosh container, or a CHCE stream with --engine."),
     dest: str = typer.Option(".", "--out", "-o", help="Destination directory."),
     only: Optional[list[str]] = typer.Option(None, "--only", help="Extract just these entries (repeatable)."),
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip per-file checksum verification."),
+    engine: str = typer.Option("auto", "--engine", "-e",
+                               help="auto | native | ziptastic | heavenzip. auto detects a CHCE stream."),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
     as_json: bool = typer.Option(False, "--json"),
 ):
-    """Extract a .kosh container, verifying every file as it lands."""
+    """Extract a .kosh container, verifying every file as it lands.
+
+    A stream written by `pack --engine ziptastic` is a CHCE stream, not a
+    container. With `--engine auto` (the default) it is decoded by the engine that
+    wrote it; `--engine native` refuses it.
+    """
+    with open(container, "rb") as fh:
+        head = fh.read(8)
+    is_chce = head.startswith(engine_mod.CHCE_MAGIC)
+
+    if is_chce:
+        if engine == "native":
+            raise KoshError(
+                "this is a CHCE stream, not a Kosh container; unpack it with "
+                "--engine ziptastic (or run `ziptastic d` yourself)"
+            )
+        chosen = "ziptastic" if engine == "auto" else engine
+        result = engine_mod.unpack_with_engine(chosen, container, dest)
+        if as_json:
+            _emit(result, True)
+            return
+        console.print(
+            f"[green]unpacked[/] with {result['engine']} → {result['output']} "
+            f"({human_size(result['bytes'])}, {result['block_count']} block(s))"
+        )
+        return
+
+    if engine not in ("auto", "native"):
+        raise KoshError(
+            f"--engine {engine} is for CHCE streams; {os.path.basename(container)} is a Kosh container"
+        )
+
     if quiet or as_json:
         result = pack_mod.unpack(container, dest, only, verify=not no_verify)
     else:
