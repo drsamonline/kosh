@@ -63,7 +63,14 @@ Kosh must not become the engine. Concretely:
 - **Keep the README's numbers reproducible.** Every table in the README comes
   from `kosh bench` or from a test in `tests/`.
 
-## 6. State
+## 6. Roadmap
+
+`docs/ROADMAP.md` holds every planned enhancement, grouped by milestone, each with
+its exit test, its size and the decision it depends on. The three next items are
+Windows CI, a real ziptastic round-trip, and the `check-claims.py` gate that keeps
+this README's tables honest.
+
+## 7. State
 
 | area | state |
 | --- | --- |

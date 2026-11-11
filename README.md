@@ -151,6 +151,7 @@ Nothing is gated behind it: no accounts, no tracking, no network requests.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the engine is put together |
 | [`docs/FINDINGS.md`](docs/FINDINGS.md) | every measured number, and what was rejected |
 | [`docs/FORMAT.md`](docs/FORMAT.md) | the container, byte by byte |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | every planned enhancement, its exit test and its open decisions |
 | [`CHANGELOG.md`](CHANGELOG.md) | what each version changed |
 
 ## Licence
