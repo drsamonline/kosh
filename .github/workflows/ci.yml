@@ -10,6 +10,89 @@ on:
   workflow_dispatch:
 
 jobs:
+  # EN-1: the delegation proven against the real engine, not a stand-in.
+  #
+  # Everything else in this workflow runs on the native path. This job fetches the
+  # published ziptastic binary, checks it against its own SHA256SUMS, packs and
+  # unpacks through it, and asserts that kosh and ziptastic read the same header —
+  # which is the bug that shipped in 1.1.0, where the parser was written against
+  # the v1 layout and reported 0 blocks for every real stream.
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Fetch the engine from its release, and check it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          tag="$(gh release view --repo drsamonline/ziptastic --json tagName --jq .tagName)"
+          echo "engine release: $tag"
+          gh release download "$tag" --repo drsamonline/ziptastic \
+            --pattern 'ziptastic-*-linux-x86_64' --dir "$RUNNER_TEMP/bin" --clobber
+          gh release download "$tag" --repo drsamonline/ziptastic \
+            --pattern 'SHA256SUMS' --dir "$RUNNER_TEMP/bin" --clobber
+          cd "$RUNNER_TEMP/bin"
+          sha256sum -c SHA256SUMS
+          mv ziptastic-*-linux-x86_64 ziptastic
+          chmod +x ziptastic
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: The engine runs
+        run: ziptastic version
+
+      - name: Round-trip through a real .dr
+        run: |
+          set -euo pipefail
+          python -c "import pathlib, random; random.seed(7); pathlib.Path('sample.bin').write_bytes(bytes(random.getrandbits(8) for _ in range(60000)) + b'the quick brown fox\n' * 4000)"
+          cp sample.bin sample.orig
+          kosh pack sample.bin -e ziptastic -o sample.dr
+          kosh verify sample.dr
+          kosh unpack sample.dr -e ziptastic -o restored.bin
+          cmp sample.orig restored.bin
+          echo "round-trip byte-exact through ziptastic"
+
+      - name: kosh and ziptastic read the same header
+        run: |
+          set -euo pipefail
+          kosh scan sample.dr --json > kosh.json
+          ziptastic info sample.dr > zt.txt
+          python - <<'PY'
+          import json, re, sys
+
+          kosh = json.load(open("kosh.json"))
+          text = open("zt.txt").read()
+
+          def field(label):
+              match = re.search(rf"^{label}\s+([0-9]+)", text, re.M)
+              if not match:
+                  sys.exit(f"ziptastic info printed no '{label}' line")
+              return int(match.group(1))
+
+          pairs = {
+              "original_size": (kosh["original_size"], field("original size")),
+              "true_size": (kosh["true_size"], field("true size")),
+              "block_count": (kosh["block_count"], field("blocks")),
+          }
+          bad = {k: v for k, v in pairs.items() if v[0] != v[1]}
+          for name, (ours, theirs) in pairs.items():
+              print(f"{name:14} kosh={ours:<10} ziptastic={theirs}")
+          if bad:
+              sys.exit(f"kosh and ziptastic disagree: {bad}")
+          print("headers agree")
+          PY
+
   test:
     runs-on: ubuntu-latest
     strategy:

@@ -172,3 +172,95 @@ def pack_with_engine(engine: str, inputs: list[str], out: str,
         "binary": exe,
         "stdout": (completed.stdout or "").strip()[:2000],
     }
+
+
+def unpack_with_engine(engine: str, stream: str, dest: str,
+                       progress: ProgressFn | None = None) -> dict:
+    """Decompress a CHCE stream by spawning the engine that wrote it.
+
+    The mirror of `pack_with_engine`, and the other half of the boundary: before
+    this, `kosh pack --engine ziptastic` produced a file that `kosh unpack`
+    refused as "not a Kosh container", so the workbench could write what it could
+    not read. The engine is spawned, never imported.
+    """
+    if engine not in ENGINES:
+        raise KoshError(f"unknown engine {engine!r} (known: {', '.join(ENGINES)})")
+    binary, _verb, suffix = ENGINES[engine]
+
+    # Look at the file before looking for the binary: telling someone to install
+    # an engine when the file is not a stream at all sends them the wrong way.
+    source = os.path.abspath(stream)
+    if not os.path.isfile(source):
+        raise KoshError(f"no such file: {stream}")
+    with open(source, "rb") as fh:
+        head = fh.read(64)
+    if not head.startswith(CHCE_MAGIC):
+        raise KoshError(f"{os.path.basename(stream)} is not a CHCE stream; unpack it as a container")
+    header = read_chce_header(head)
+
+    exe = shutil.which(binary)
+    if not exe:
+        raise KoshError(
+            f"{binary} is not on PATH. Build it from the CHCE family "
+            f"(github.com/drsamonline/{engine}), or unpack the stream with "
+            f"`{binary} d` yourself."
+        )
+
+    if progress:
+        progress(0, 1, f"running {binary} d")
+
+    with tempfile.TemporaryDirectory(prefix="kosh-engine-") as work:
+        # The engine writes beside its input and names it after it, so stage the
+        # stream in an empty directory and take whatever appears that is not it.
+        staged = os.path.join(work, os.path.basename(source))
+        shutil.copy2(source, staged)
+        try:
+            completed = subprocess.run(  # noqa: S603 - fixed argv, resolved binary
+                [exe, "d", staged], cwd=work, capture_output=True, text=True, timeout=6 * 3600,
+            )
+        except OSError as exc:
+            raise KoshError(f"could not run {binary}: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise KoshError(f"{binary} did not finish within six hours") from exc
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+            raise KoshError(f"{binary} failed: {detail[-1] if detail else 'no output'}")
+
+        produced = None
+        for root, _dirs, files in os.walk(work):
+            for name in files:
+                candidate = os.path.join(root, name)
+                if os.path.abspath(candidate) != os.path.abspath(staged):
+                    produced = candidate
+                    break
+            if produced:
+                break
+        if not produced:
+            raise KoshError(f"{binary} reported success but wrote no output")
+
+        # A CHCE stream carries no filename, so the engine names its output after
+        # the input (payload.dr → payload, anything else → <name>.out). If the
+        # caller gave a path that is not an existing directory, that path is the
+        # name they want.
+        if os.path.isdir(dest) or dest in ("", "."):
+            os.makedirs(os.path.abspath(dest) or ".", exist_ok=True)
+            target = os.path.join(os.path.abspath(dest), os.path.basename(produced))
+        else:
+            target = os.path.abspath(dest)
+            os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+        shutil.move(produced, target)
+
+    size = os.path.getsize(target)
+    if size != header["true_size"]:
+        raise KoshError(
+            f"decoded size {size} does not match the stream header's true_size "
+            f"{header['true_size']}; the stream is damaged"
+        )
+
+    if progress:
+        progress(1, 1, "done")
+    return {
+        "engine": engine, "output": target, "bytes": size,
+        "true_size": header["true_size"], "block_count": header["block_count"],
+        "binary": exe, "stdout": (completed.stdout or "").strip()[:2000],
+    }
