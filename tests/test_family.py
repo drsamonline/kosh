@@ -146,7 +146,9 @@ def test_engine_pack_spawns_a_binary(tmp_path, monkeypatch):
         "echo compressed\n"
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    # os.pathsep, not ":": on Windows the separator is ";" and a ":" joined PATH is
+    # one bogus entry, so shutil.which finds nothing.
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
 
     src = tmp_path / "input.txt"
     src.write_bytes(b"engine boundary test\n" * 500)
@@ -232,7 +234,9 @@ def test_engine_unpack_is_the_mirror_of_engine_pack(tmp_path, monkeypatch):
         "    sys.exit(2)\n"
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    # os.pathsep, not ":": on Windows the separator is ";" and a ":" joined PATH is
+    # one bogus entry, so shutil.which finds nothing.
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
 
     src = tmp_path / "input.txt"
     src.write_bytes(b"engine boundary\n" * 5)   # 80 bytes
