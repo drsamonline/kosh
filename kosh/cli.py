@@ -534,6 +534,16 @@ def scan(
             probe = zstandard.ZstdCompressor(level=3).compress(sample)
             payload["compressible"] = len(probe) < len(sample) * 0.95
             payload["sample_ratio"] = round(len(probe) / len(sample), 3)
+
+            # EN-3: the question a user actually has is "would the engine help,
+            # before I spend the time". Answered by the engine itself on a middle
+            # slice, because an estimate from a different codec is a guess wearing
+            # the engine's name.
+            estimate = engine_mod.estimate_gain(path)
+            if estimate is None:
+                payload["engine_estimate"] = "no engine on PATH — `kosh engines` lists what is here"
+            else:
+                payload["engine_estimate"] = estimate
     except KoshError as exc:
         payload["note"] = str(exc)
 
@@ -545,8 +555,17 @@ def scan(
     table.add_column("field")
     table.add_column("value", overflow="fold")
     for key, value in payload.items():
-        if key != "path":
-            table.add_row(key, str(value))
+        if key == "path":
+            continue
+        if isinstance(value, dict) and "predicted_size" in value:
+            table.add_row(
+                "engine_estimate",
+                f"{human_size(value['predicted_size'])} predicted "
+                f"({value['predicted_saving'] * 100:.1f}% smaller) from a "
+                f"{human_size(value['sample_bytes'])} sample, {value['seconds']}s",
+            )
+            continue
+        table.add_row(key, str(value))
     console.print(table)
     console.print(f"[dim]{payload['path']}[/]")
 

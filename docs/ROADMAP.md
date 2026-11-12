@@ -207,6 +207,9 @@ family, not a preference of the author.
   `twine check`s them, installs the wheel in a clean environment and runs
   `kosh doctor` from it. Publishing waits on a `PYPI_API_TOKEN` secret; the job
   stops at a guard that names it.
+- **Also done:** **EN-3** — `kosh scan` predicts the engine's output from a 1 MiB
+  middle sample compressed by the engine itself: worst error 2.2% across the
+  corpus (`docs/FINDINGS.md` §7).
 - **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
   forgets a job when the tab closes, the landing page is not published, and an
   engine stream cannot be listed without decoding it.
@@ -216,6 +219,5 @@ family, not a preference of the author.
   asserts it matches `ziptastic info` block for block. **CT-11** —
   `tools/check-claims.py` fails the build when a number in the README is not in
   `docs/FINDINGS.md`.
-- **Next three, in order:** CT-9 (PyPI), EN-3 (the gain estimator), EN-5
-  (`run recipe.yaml`). The first is about being installable; the other two are
-  about answering "would this help?" before spending the time.
+- **Next three, in order:** EN-5 (`run recipe.yaml`), CT-3 (property-based
+  round-trips), CT-4 (corruption fuzzing).
