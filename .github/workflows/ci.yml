@@ -93,6 +93,37 @@ jobs:
           print("headers agree")
           PY
 
+      - name: kosh info reads the same block table as ziptastic
+        run: |
+          set -euo pipefail
+          kosh info sample.dr --json > info.json
+          ziptastic info sample.dr > zt2.txt
+          python - <<'PY'
+          import json, re, sys
+
+          info = json.load(open("info.json"))
+          text = open("zt2.txt").read()
+
+          # ziptastic prints one row per block: `  0    0x00000012 3681  15664  LZMA2_FALLBACK`
+          rows = re.findall(r"^\s*(\d+)\s+0x([0-9a-f]+)\s+(\d+)\s+(\d+)\s+(\S+)\s*$", text, re.M)
+          if not rows:
+              sys.exit("ziptastic info printed no block rows")
+          if len(rows) != len(info["blocks"]):
+              sys.exit(f"block count differs: ziptastic {len(rows)}, kosh {len(info['blocks'])}")
+
+          bad = []
+          for index, (number, offset, csize, usize, mode) in enumerate(rows):
+              block = info["blocks"][index]
+              if block["offset"] != int(offset, 16) or block["compressed_size"] != int(csize) \
+                 or block["uncompressed_size"] != int(usize):
+                  bad.append((index, block, (offset, csize, usize)))
+          for index, block, theirs in bad:
+              print(f"block {index}: kosh {block} ziptastic {theirs}")
+          if bad:
+              sys.exit("kosh and ziptastic disagree about the block table")
+          print(f"block table agrees: {len(rows)} block(s)")
+          PY
+
   test:
     runs-on: ubuntu-latest
     strategy:

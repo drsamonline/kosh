@@ -244,3 +244,84 @@ def test_engine_unpack_without_the_engine_names_it(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", "/nonexistent")
     with pytest.raises(KoshError, match="not on PATH"):
         engine.unpack_with_engine("ziptastic", str(stream), str(tmp_path / "out"))
+
+
+# --- EN-4: the v8 block table ------------------------------------------------
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _stream(blocks, version=8):
+    """A synthetic CHCE stream: header, blocks, and a v8 trailer."""
+    payload = bytearray()
+    for _ in range(blocks):
+        payload += bytes([0x05]) + _varint(1000) + _varint(400) + b"\x11" * 32 + b"p" * 400
+    header = b"CHCE" + bytes([version, 0x40, 0, 0, 0]) + _varint(1000 * blocks) + _varint(1000 * blocks) + _varint(blocks) + b"\x00" * 4
+    # v7 and below have no table, so the stream simply ends.
+    if version < 8:
+        return header + bytes(payload)
+
+    body = header
+    offsets = []
+    for _ in range(blocks):
+        offsets.append(len(body))
+        body += bytes([0x05]) + _varint(1000) + _varint(400) + b"\x11" * 32 + b"p" * 400
+    trailer = b"ZTIX" + _varint(blocks) + b"\x22" * 32
+    trailer += b"".join(offset.to_bytes(8, "little") for offset in offsets)
+    trailer += b"ZTOX"
+    return body + trailer
+
+
+def test_block_table_is_read(tmp_path):
+    path = tmp_path / "two.dr"
+    path.write_bytes(_stream(2))
+    trailer = engine.read_chce_trailer(str(path))
+    assert trailer["count"] == 2
+    assert len(trailer["offsets"]) == 2
+    assert trailer["offsets"][0] < trailer["offsets"][1]
+    assert trailer["trailer_bytes"] == 4 + 1 + 32 + 16 + 4
+
+    blocks = engine.read_blocks(str(path), trailer)
+    assert [b["index"] for b in blocks] == [0, 1]
+    assert blocks[0]["offset"] == trailer["offsets"][0]
+    assert blocks[0]["uncompressed_size"] == 1000
+    assert blocks[0]["compressed_size"] == 400
+    assert blocks[0]["mode"] == 0x05
+    assert blocks[0]["digest"] == "11" * 32
+
+
+def test_a_v7_stream_says_it_has_no_table(tmp_path):
+    path = tmp_path / "old.dr"
+    path.write_bytes(_stream(1, version=7))
+    with pytest.raises(KoshError, match="no block table"):
+        engine.read_chce_trailer(str(path))
+
+
+def test_a_truncated_trailer_is_refused(tmp_path):
+    data = _stream(2)
+    path = tmp_path / "cut.dr"
+    path.write_bytes(data[:-2])  # lose part of ZTOX
+    # Cutting bytes moves where the trailer is expected to start, so the reader may
+    # fail on ZTIX rather than ZTOX — either way it refuses instead of guessing.
+    with pytest.raises(KoshError, match="ZTIX|ZTOX|shorter|truncated"):
+        engine.read_chce_trailer(str(path))
+
+
+def test_a_trailer_that_disagrees_with_the_header_is_refused(tmp_path):
+    # Rewrite the trailer's count so it no longer matches the header's.
+    data = bytearray(_stream(2))
+    index = data.rfind(b"ZTIX")
+    data[index + 4] = 3
+    path = tmp_path / "lying.dr"
+    path.write_bytes(bytes(data))
+    with pytest.raises(KoshError, match="header says"):
+        engine.read_chce_trailer(str(path))
