@@ -248,7 +248,7 @@ def unpack(
     wrote it; `--engine native` refuses it.
     """
     with open(container, "rb") as fh:
-        head = fh.read(8)
+        head = fh.read(64)
     is_chce = head.startswith(engine_mod.CHCE_MAGIC)
 
     if is_chce:
@@ -294,7 +294,21 @@ def ls(
     target: str = typer.Argument(..., help="A .kosh, .zip or .tar[.gz|.zst] archive."),
     as_json: bool = typer.Option(False, "--json"),
 ):
-    """List the contents of any archive Kosh understands."""
+    """List the contents of any archive Kosh understands.
+
+    A CHCE stream is not an archive: it holds one payload and a block table, not
+    named entries. `kosh info` shows the blocks; extracting is `kosh unpack -e
+    ziptastic`.
+    """
+    with open(target, "rb") as fh:
+        head = fh.read(64)
+    if head.startswith(engine_mod.CHCE_MAGIC):
+        raise KoshError(
+            f"{os.path.basename(target)} is a CHCE stream, not an archive: one payload and a "
+            "block table, no named entries. `kosh info` shows the blocks; `kosh unpack "
+            "--engine ziptastic` extracts it."
+        )
+
     info = archive_mod.list_archive(target)
     if as_json:
         _emit(info, True)
@@ -562,7 +576,65 @@ def info(
     container: str = typer.Argument(..., help="A .kosh container."),
     as_json: bool = typer.Option(False, "--json"),
 ):
-    """Show a container's header and physical block layout."""
+    """Show a container's header and physical block layout.
+
+    A CHCE stream has the same question and a different answer: its layout is a
+    header, blocks and a v8 trailer holding the block offsets. Roadmap EN-4.
+    """
+    with open(container, "rb") as fh:
+        head = fh.read(64)
+    if head.startswith(engine_mod.CHCE_MAGIC):
+        header = engine_mod.read_chce_header(head)
+        try:
+            trailer = engine_mod.read_chce_trailer(container)
+            blocks = engine_mod.read_blocks(container, trailer)
+        except KoshError as exc:
+            raise KoshError(f"{exc}") from exc
+
+        payload = {
+            "path": os.path.abspath(container),
+            "kind": "chce-stream",
+            "version": header["version"],
+            "flags": header["flags"],
+            "layers": header["layers"],
+            "original_size": header["original_size"],
+            "true_size": header["true_size"],
+            "crc32": header["crc32"],
+            "stored_size": os.path.getsize(container),
+            "block_count": trailer["count"],
+            "trailer_bytes": trailer["trailer_bytes"],
+            "manifest_sha256": trailer["manifest_sha256"],
+            "blocks": blocks,
+        }
+        if as_json:
+            _emit(payload, True)
+            return
+
+        head_table = Table(title=os.path.basename(container), header_style="bold cyan", show_header=False)
+        head_table.add_column("field")
+        head_table.add_column("value", overflow="fold")
+        for key in ("kind", "version", "flags", "layers", "original_size", "true_size", "crc32",
+                    "stored_size", "block_count", "trailer_bytes"):
+            value = payload[key]
+            head_table.add_row(key, human_size(value) if key in ("original_size", "true_size", "stored_size") else str(value))
+        head_table.add_row("manifest", (payload["manifest_sha256"] or "-")[:16] + "…")
+        console.print(head_table)
+
+        table = Table(title="blocks", header_style="bold cyan")
+        for column in ("#", "offset", "compressed", "uncompressed", "mode", "digest"):
+            table.add_column(column, overflow="fold")
+        for block in blocks:
+            table.add_row(
+                str(block["index"]),
+                f"0x{block['offset']:08x}",
+                human_size(block["compressed_size"]),
+                human_size(block["uncompressed_size"]),
+                f"0x{block['mode']:02x}",
+                block["digest"][:16] + "…",
+            )
+        console.print(table)
+        return
+
     toc = pack_mod.read_toc(container)
     rows = pack_mod.block_index(container)
     payload = {

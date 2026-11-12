@@ -110,6 +110,108 @@ def read_chce_header(head: bytes) -> dict:
     }
 
 
+def read_chce_trailer(path: str) -> dict:
+    """The v8 trailer: block offsets, and the digest that binds them.
+
+    ziptastic's docs/FORMAT.md, "Version 8: the block offset table":
+
+        "ZTIX" | block_count varint | sha256(manifest)[32]
+              | block_offset[0..count-1] as u64 little-endian | "ZTOX"
+
+    The trailer is a fixed size for a given block count, so a reader that has the
+    header can compute where it starts instead of walking the stream — which is the
+    entire point of the table. Every offset is absolute, counted from the `C` of
+    `CHCE`.
+    """
+    size = os.path.getsize(path)
+    with open(path, "rb") as fh:
+        head = fh.read(64)
+        header = read_chce_header(head)
+        count = header["block_count"]
+        if header["version"] < 8:
+            raise KoshError(
+                f"CHCE format v{header['version']} has no block table; v8 added it"
+            )
+
+        # "ZTIX" + varint(count) + 32-byte digest + 8*count + "ZTOX"
+        tail_bytes = 4 + len(_varint_bytes(count)) + 32 + 8 * count + 4
+        if size < tail_bytes:
+            raise KoshError("CHCE stream is shorter than its own trailer")
+        fh.seek(size - tail_bytes)
+        trailer = fh.read(tail_bytes)
+
+    if not trailer.startswith(b"ZTIX"):
+        raise KoshError("CHCE trailer does not start with ZTIX (truncated or not v8)")
+    if not trailer.endswith(b"ZTOX"):
+        raise KoshError("CHCE trailer does not end with ZTOX (truncated inside the table)")
+
+    pos = 4
+    found_count, pos = _read_varint(trailer, pos)
+    if found_count != count:
+        raise KoshError(
+            f"trailer says {found_count} blocks, header says {count}"
+        )
+    manifest = trailer[pos:pos + 32]
+    pos += 32
+
+    offsets = list(struct.unpack(f"<{count}Q", trailer[pos:pos + 8 * count]))
+    for earlier, later in zip(offsets, offsets[1:]):
+        if later <= earlier:
+            raise KoshError("block offsets are not strictly increasing")
+
+    return {
+        "count": count,
+        "manifest_sha256": manifest.hex(),
+        "offsets": offsets,
+        "trailer_bytes": tail_bytes,
+    }
+
+
+def read_blocks(path: str, trailer: dict | None = None) -> list[dict]:
+    """Each block's offset, mode byte and sizes, read from its own header.
+
+        mode u8 | uncompressed_size varint | compressed_size varint | sha256[32] | ...
+
+    The metadata that follows depends on the mode and is not parsed here: the
+    question `kosh info` answers is where the blocks are and how big they are.
+    """
+    if trailer is None:
+        trailer = read_chce_trailer(path)
+    blocks = []
+    with open(path, "rb") as fh:
+        for index, offset in enumerate(trailer["offsets"]):
+            fh.seek(offset)
+            head = fh.read(64)
+            if not head:
+                raise KoshError(f"block {index} is past the end of the file")
+            mode = head[0]
+            uncompressed, pos = _read_varint(head, 1)
+            compressed, pos = _read_varint(head, pos)
+            blocks.append(
+                {
+                    "index": index,
+                    "offset": offset,
+                    "mode": mode,
+                    "uncompressed_size": uncompressed,
+                    "compressed_size": compressed,
+                    "digest": head[pos:pos + 32].hex(),
+                }
+            )
+    return blocks
+
+
+def _varint_bytes(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
 def pack_with_engine(engine: str, inputs: list[str], out: str,
                      progress: ProgressFn | None = None) -> dict:
     """Compress with an external CHCE engine, then move its output into place.

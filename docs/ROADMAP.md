@@ -202,7 +202,9 @@ family, not a preference of the author.
   is not published, and an engine stream still cannot be listed or inspected
   without decoding it (EN-4).
 - **Also done since:** **CT-10** — `tools/check-version.py` fails the build when
-  `pyproject.toml`, `kosh/__init__.py` and the version badge disagree.
-- **Next three, in order:** CT-1 (Windows CI), CT-11 (`check-claims.py`), EN-4
-  (`.dr` block table in `info`). The first is about being *true* elsewhere; the
-  other two are about staying true.
+  `pyproject.toml`, `kosh/__init__.py` and the version badge disagree. **EN-4** —
+  `kosh info file.dr` reads the v8 trailer and prints the block table, and CI
+  asserts it matches `ziptastic info` block for block.
+- **Next three, in order:** CT-1 (Windows CI), CT-11 (`check-claims.py`), EN-3
+  (the gain estimator). The first is about being *true* elsewhere; the other two
+  are about staying true.
