@@ -416,3 +416,23 @@ def test_engines_command_lists_every_known_engine():
     assert names == set(engine.ENGINES)
     for row in rows:
         assert set(row) >= {"engine", "available", "path", "version", "suffix"}
+
+
+def test_every_command_the_readme_lists_is_registered():
+    """A lost decorator is invisible until someone types the command.
+
+    Adding `engines` here removed `version` from the CLI — the insertion ate its
+    decorator, and only the smoke step on macOS noticed. This test makes that a
+    unit failure instead.
+    """
+    from kosh.cli import app
+
+    registered = {command.name or command.callback.__name__ for command in app.registered_commands}
+    # `archive` is a sub-typer, not a command: it lives in registered_groups.
+    registered |= {group.name for group in app.registered_groups}
+    expected = {
+        "split", "join", "parts", "pack", "unpack", "ls", "optimize", "scan",
+        "verify", "info", "doctor", "bench", "ui", "version", "archive", "engines",
+    }
+    missing = expected - registered
+    assert not missing, f"commands missing from the CLI: {sorted(missing)}"

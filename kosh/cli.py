@@ -772,7 +772,6 @@ def ui(
     serve(host=host, port=port, open_browser=open_browser)
 
 
-@app.command()
 @app.command("engines")
 @handle
 def engines(as_json: bool = typer.Option(False, "--json")):
@@ -815,6 +814,7 @@ def engines(as_json: bool = typer.Option(False, "--json")):
                       "github.com/drsamonline/ziptastic to drive it[/]")
 
 
+@app.command("version")
 def version():
     """Print the version."""
     console.print(f"kosh {__version__}")
