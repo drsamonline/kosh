@@ -197,16 +197,19 @@ family, not a preference of the author.
   published ziptastic binary, checks it against its own `SHA256SUMS`, and asserts
   Kosh and ziptastic read the same header) and **EN-2** (`unpack --engine`, so
   what `pack --engine` writes can be read back). 49 tests.
-- **Known gaps, honestly:** no Windows or macOS run, Zopfli is the slow path on
-  anything above 1 MB, the UI forgets a job when the tab closes, the landing page
-  is not published, and an engine stream still cannot be listed or inspected
-  without decoding it (EN-4).
+- **Also done:** **CT-1/CT-2** — the suite runs on `windows-latest` and
+  `macos-latest` as well as Ubuntu, six jobs. The first Windows run found three
+  real defects: `kosh doctor` died on a legacy codepage, the engine's output was
+  decoded with the locale encoding, and the stand-in engine was a shell script.
+- **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
+  forgets a job when the tab closes, the landing page is not published, and an
+  engine stream cannot be listed without decoding it.
 - **Also done since:** **CT-10** — `tools/check-version.py` fails the build when
   `pyproject.toml`, `kosh/__init__.py` and the version badge disagree. **EN-4** —
   `kosh info file.dr` reads the v8 trailer and prints the block table, and CI
   asserts it matches `ziptastic info` block for block. **CT-11** —
   `tools/check-claims.py` fails the build when a number in the README is not in
   `docs/FINDINGS.md`.
-- **Next three, in order:** CT-1 (Windows CI), CT-9 (PyPI), EN-3 (the gain
-  estimator). The first two are about being installable elsewhere; the third is
+- **Next three, in order:** CT-9 (PyPI), EN-3 (the gain estimator), EN-5
+  (`run recipe.yaml`). The first is about being installable; the other two are
   about answering "would this help?" before spending the time.
