@@ -114,10 +114,26 @@ def test_chce_header_is_parsed():
     assert parsed["block_count"] == 7 and parsed["decoder"] == "ziptastic"
 
 
+def _stand_in_engine(tmp_path):
+    """A path that `shutil.which("ziptastic")` finds on this platform.
+
+    On POSIX that is a script with a shebang. On Windows a shebang script is not
+    executable at all: the file needs an extension from PATHEXT, so the script is
+    `ziptastic.py` and the thing on PATH is `ziptastic.cmd` that calls it.
+    """
+    directory = tmp_path / "bin"
+    directory.mkdir()
+    if os.name == "nt":
+        script = directory / "ziptastic.py"
+        shim = directory / "ziptastic.cmd"
+        shim.write_text(f'@"{sys.executable}" "%~dp0ziptastic.py" %*\r\n', encoding="utf-8")
+        return script
+    return directory / "ziptastic"
+
+
 def test_engine_pack_spawns_a_binary(tmp_path, monkeypatch):
     """A stand-in engine proves the process boundary works without ziptastic installed."""
-    fake = tmp_path / "bin" / "ziptastic"
-    fake.parent.mkdir()
+    fake = _stand_in_engine(tmp_path)
     fake.write_text(
         "#!/bin/sh\n"
         "set -e\n"
@@ -199,8 +215,7 @@ def test_engine_unpack_is_the_mirror_of_engine_pack(tmp_path, monkeypatch):
     stand-in writes a real 16-byte CHCE v8 header (one-byte varints) and gzips the
     payload, so the size check against true_size has something to check.
     """
-    fake = tmp_path / "bin" / "ziptastic"
-    fake.parent.mkdir()
+    fake = _stand_in_engine(tmp_path)
     fake.write_text(
         f"#!{sys.executable}\n"
         "import gzip, sys\n"
@@ -341,7 +356,8 @@ def test_doctor_survives_a_legacy_console_codepage():
     env = dict(os.environ, PYTHONIOENCODING="cp1252")
     completed = subprocess.run(
         [sys.executable, "-m", "kosh.cli", "doctor"],
-        capture_output=True, text=True, env=env, timeout=120,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=env, timeout=120,
     )
     assert "UnicodeEncodeError" not in (completed.stderr or ""), completed.stderr
     assert completed.returncode == 0, completed.stderr or completed.stdout
