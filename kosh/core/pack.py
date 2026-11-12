@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import stat
+import shutil
 import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -314,7 +315,8 @@ def list_container(path: str) -> dict:
 def unpack(path: str, dest: str = ".", members: Optional[list[str]] = None,
            verify: bool = True, threads: Optional[int] = None,
            progress: Optional[ProgressFn] = None,
-           overwrite: bool = True) -> UnpackResult:
+           overwrite: bool = True, max_bytes: Optional[int] = None,
+           check_space: bool = True) -> UnpackResult:
     toc = read_toc(path)
     codec = toc.get("codec", "zstd")
     threads = max(1, threads or min(8, cpu_count()))
@@ -332,6 +334,24 @@ def unpack(path: str, dest: str = ".", members: Optional[list[str]] = None,
 
     total = sum(e.get("size", 0) for e in toc["entries"]
                 if e["type"] == "file" and (wanted is None or e["path"] in wanted))
+
+    # A zip bomb is a legitimate archive. Refuse before writing anything rather
+    # than filling the disk and reporting the failure as an OSError from the last
+    # write — the size is in the table of contents, so the answer is free.
+    if max_bytes is not None and total > max_bytes:
+        raise KoshError(
+            f"this container expands to {human_size(total)}, over the {human_size(max_bytes)} "
+            "budget; pass --max-size to allow it"
+        )
+    if check_space:
+        try:
+            free = shutil.disk_usage(dest).free
+        except OSError:  # pragma: no cover - dest is not stat-able yet
+            free = None
+        if free is not None and total > free:
+            raise KoshError(
+                f"extracting needs {human_size(total)} but {human_size(free)} is free in {dest}"
+            )
     done = 0
     written_entries = 0
     skipped: list[str] = []
