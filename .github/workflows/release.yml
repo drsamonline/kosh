@@ -1,0 +1,83 @@
+name: release
+
+# CT-9: an installable package, and the only place a publish happens.
+#
+# `pip install -e .` is not an install: it needs the source tree, the dev extras and
+# a checkout. This builds the sdist and wheel, checks them, proves the wheel works in
+# a clean environment, and — on a tag — uploads to PyPI.
+#
+# The publish step needs `PYPI_API_TOKEN` (a PyPI API token, not a password). Without
+# it the job stops at the guard and says so, rather than failing inside twine with a
+# 403 nobody can read.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: twine check
+        run: python -m twine check dist/*
+
+      - name: The tag and the source must agree
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(python -c "import kosh; print(kosh.__version__)")"
+          tag="${GITHUB_REF#refs/tags/v}"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag v$tag does not match kosh.__version__ $version"
+            exit 1
+          fi
+
+      - name: The wheel installs and runs in a clean environment
+        # The exit test CT-9 names: `pip install`, then `kosh doctor` passes. A
+        # package that builds but cannot start is a package nobody has installed.
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --quiet dist/*.whl
+          /tmp/clean/bin/kosh version
+          /tmp/clean/bin/kosh doctor
+          /tmp/clean/bin/kosh engines
+
+      - name: PYPI_API_TOKEN must be set to publish
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ -z "${PYPI_API_TOKEN:-}" ]; then
+            echo "::error::PYPI_API_TOKEN is not set. Create a PyPI API token for the 'kosh' project and add it as a repository secret; see docs/PROFILES.md."
+            exit 1
+          fi
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python -m twine upload dist/*
+
+      - name: Keep the artefacts when nothing was published
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosh-dist
+          path: dist/*
+          if-no-files-found: error

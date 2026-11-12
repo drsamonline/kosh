@@ -203,6 +203,10 @@ family, not a preference of the author.
   decoded with the locale encoding, and the stand-in engine was a shell script.
 - **Also done:** **EN-6** — `kosh engines` lists every engine with its path and
   version, and `doctor` reports the version rather than only presence.
+- **Also done:** **CT-9** (the build half) — `release.yml` builds sdist and wheel,
+  `twine check`s them, installs the wheel in a clean environment and runs
+  `kosh doctor` from it. Publishing waits on a `PYPI_API_TOKEN` secret; the job
+  stops at a guard that names it.
 - **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
   forgets a job when the tab closes, the landing page is not published, and an
   engine stream cannot be listed without decoding it.

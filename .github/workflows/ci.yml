@@ -185,6 +185,14 @@ jobs:
         # docs/FINDINGS.md is the authority for any number quoted anywhere else.
         run: python tools/check-claims.py
 
+      - name: The package builds and passes twine check (CT-9)
+        # Once per matrix is wasteful, so only on the Ubuntu 3.12 job.
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          python -m pip install --quiet build twine
+          python -m build
+          python -m twine check dist/*
+
       - name: CLI smoke
         run: |
           kosh version
