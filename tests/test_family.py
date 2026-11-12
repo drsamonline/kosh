@@ -496,8 +496,14 @@ def test_atomic_write_fsyncs_the_directory(tmp_path, monkeypatch):
     with util_mod.atomic_write(str(target)) as fh:
         fh.write(b"payload")
     assert target.read_bytes() == b"payload"
-    # One fsync for the file, one for the directory.
-    assert len(synced) >= 2, f"expected a directory fsync too, saw {len(synced)}"
+    if os.name == "nt":
+        # Windows has no directory handle to flush: `os.open` on a directory fails,
+        # so the helper returns quietly and only the file is fsynced. That is the
+        # documented behaviour, not a pass by accident.
+        assert len(synced) >= 1
+    else:
+        # One fsync for the file, one for the directory entry.
+        assert len(synced) >= 2, f"expected a directory fsync too, saw {len(synced)}"
 
 
 def test_unpack_refuses_a_payload_over_the_budget(tmp_path):
