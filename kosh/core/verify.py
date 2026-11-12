@@ -43,6 +43,32 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> 
     if head.startswith(engine_mod.CHCE_MAGIC):
         return _verify_chce(path, head)
 
+    # A file whose footer says KOSH but whose header does not is a damaged
+    # container, not an arbitrary file: reporting it as "intact (hash only)" tells a
+    # user their backup is fine when the container around it has been rewritten.
+    if not head.startswith(pack_mod.START_MAGIC) and os.path.getsize(path) >= len(pack_mod.END_MAGIC) + 4:
+        with open(path, "rb") as fh:
+            fh.seek(-len(pack_mod.END_MAGIC), os.SEEK_END)
+            tail = fh.read(len(pack_mod.END_MAGIC))
+        if tail == pack_mod.END_MAGIC:
+            return {
+                "path": path, "kind": "kosh", "ok": False, "entries": 0,
+                "bytes": os.path.getsize(path), "problems": [
+                    "the footer says KOSH but the header does not: the container was damaged or truncated"
+                ], "checked": "header only",
+            }
+
+    # A `.kosh` that does not parse is a damaged container, not an unknown file.
+    # The extension is evidence here: Kosh writes `.kosh` and nothing else does, so
+    # "intact (hash only)" on one is the reassurance a truncated backup must not get.
+    if path.lower().endswith(".kosh"):
+        return {
+            "path": path, "kind": "kosh", "ok": False, "entries": 0,
+            "bytes": os.path.getsize(path), "problems": [
+                "a .kosh file that does not parse as a container: truncated or damaged"
+            ], "checked": "header only",
+        }
+
     if path.endswith(splitjoin.MANIFEST_SUFFIX):
         return _verify_split(path, progress)
 
