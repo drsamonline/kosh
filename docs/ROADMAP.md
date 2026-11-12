@@ -201,6 +201,8 @@ family, not a preference of the author.
   anything above 1 MB, the UI forgets a job when the tab closes, the landing page
   is not published, and an engine stream still cannot be listed or inspected
   without decoding it (EN-4).
+- **Also done since:** **CT-10** — `tools/check-version.py` fails the build when
+  `pyproject.toml`, `kosh/__init__.py` and the version badge disagree.
 - **Next three, in order:** CT-1 (Windows CI), CT-11 (`check-claims.py`), EN-4
   (`.dr` block table in `info`). The first is about being *true* elsewhere; the
   other two are about staying true.

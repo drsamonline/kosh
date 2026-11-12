@@ -133,6 +133,12 @@ jobs:
             exit 1
           }
 
+      - name: One version string, in all three places (CT-10)
+        # pyproject declares it, __init__ ships it, the badge advertises it. Nothing
+        # compared the three before this, so a bump that missed one shipped a footer
+        # that lies.
+        run: python tools/check-version.py
+
       - name: CLI smoke
         run: |
           kosh version
