@@ -143,3 +143,22 @@ and the gap widens with file size, which is the point.
 A first attempt used `lzma` at preset 6 on a front-of-file sample as a cheap proxy
 and was wrong by +35.5% on prose and −19.7% on the log. Recorded because the
 plausible method was the inaccurate one.
+
+## 8. Corruption fuzzing (CT-4)
+
+`verify` must fail closed on any mutation: refuse it, or accept it only when the
+container still parses to exactly the same structure. Anything else is a false
+"intact", and that is the one failure a verifier cannot have.
+
+Three real defects came out of the first run, none of which a hand-written test had
+found:
+
+| Defect | Consequence | Fix |
+| --- | --- | --- |
+| Renaming the `version` key in the table of contents (`"version"` → `"wersion"`) | `read_toc` defaulted to version 1, and the manifest-digest check only runs for version 2 and above — **one byte switched the integrity check off** | `version` is required and must be a positive integer; a version-2 container without a digest is refused |
+| Damaging the `START_MAGIC` | the file fell through to the generic branch and reported **"intact (hash only)"** | a footer that says KOSH with a header that does not is damage; so is a `.kosh` that does not parse |
+| A flipped bit in the table-of-contents length field | the reader sought before the start of the file and raised **`OSError`** — a crash, not a refusal | the length is bounded by the file minus its own header and footer |
+
+Exhaustive single-bit sweep on a 461-byte container — 3 688 mutations, every bit of
+every byte — now refuses or accepts-with-identical-structure in all of them. The
+random fuzzer runs 400 mutations on every push and 100 000 nightly.

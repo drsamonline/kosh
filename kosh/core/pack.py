@@ -259,9 +259,16 @@ def read_toc(path: str, verify_manifest: bool = True) -> dict:
         (toc_len,) = struct.unpack("<I", fh.read(4))
         if fh.read(len(END_MAGIC)) != END_MAGIC:
             raise KoshError("container footer is damaged (truncated download?)")
-        if toc_len > size:
+        # The table cannot be larger than the file minus its own header and footer,
+        # and a length that says otherwise would seek before the start of the file —
+        # which raises OSError rather than KoshError, so `verify` crashed instead of
+        # refusing. One flipped bit in this field is enough; found by the exhaustive
+        # sweep in tests/test_fuzz.py.
+        body_start = len(START_MAGIC)
+        footer = len(END_MAGIC) + 4
+        if toc_len > size - body_start - footer:
             raise KoshError("container table of contents is corrupt")
-        fh.seek(size - len(END_MAGIC) - 4 - toc_len)
+        fh.seek(size - footer - toc_len)
         blob = fh.read(toc_len)
     try:
         toc = json.loads(blob.decode("utf-8"))
@@ -269,10 +276,23 @@ def read_toc(path: str, verify_manifest: bool = True) -> dict:
         raise KoshError("container table of contents is corrupt") from exc
     if toc.get("format") != FORMAT:
         raise KoshError("not a Kosh container")
-    if toc.get("version", 0) > VERSION:
+
+    # `version` must be present, not defaulted. A one-byte edit that renames the key
+    # — `"version"` to `"wersion"` — used to fall back to version 1, and the digest
+    # check below only runs for version 2 and above, so the mutation switched the
+    # integrity check off and the container reported intact. Found by the corruption
+    # fuzzer (CT-4).
+    if "version" not in toc:
+        raise KoshError("container table of contents has no version")
+    version = toc["version"]
+    if not isinstance(version, int) or version < 1:
+        raise KoshError("container version is not a positive integer")
+    if version > VERSION:
         raise KoshError("container was written by a newer Kosh; please upgrade")
-    if verify_manifest and toc.get("version", 1) >= 2:
-        if toc.get("manifest_sha256") != manifest_digest(toc):
+    if verify_manifest and version >= 2:
+        if "manifest_sha256" not in toc:
+            raise KoshError("a version-2 container must carry a manifest digest")
+        if toc["manifest_sha256"] != manifest_digest(toc):
             raise KoshError("container manifest digest mismatch: metadata is corrupt")
     return toc
 
