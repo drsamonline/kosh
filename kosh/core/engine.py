@@ -110,6 +110,35 @@ def read_chce_header(head: bytes) -> dict:
     }
 
 
+def probe_version(engine: str, timeout: float = 10.0) -> str | None:
+    """Ask an installed engine what it is.
+
+    `doctor` used to report only presence, which is the least useful half of the
+    answer: a 1.2.0 binary and a 1.4.2 binary both "import". The engine's own
+    `version` verb is the authority, and it is one short subprocess.
+
+    Returns None when the engine is absent or does not answer — a probe that fails
+    must not turn a doctor check red, because the engine is optional.
+    """
+    binary = ENGINES.get(engine, (None,))[0]
+    if binary is None:
+        return None
+    exe = shutil.which(binary)
+    if not exe:
+        return None
+    try:
+        completed = subprocess.run(
+            [exe, "version"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    first = (completed.stdout or completed.stderr or "").strip().splitlines()
+    return first[0] if first else None
+
+
 def read_chce_trailer(path: str) -> dict:
     """The v8 trailer: block offsets, and the digest that binds them.
 
