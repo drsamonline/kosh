@@ -132,20 +132,24 @@ def _stand_in_engine(tmp_path):
 
 
 def test_engine_pack_spawns_a_binary(tmp_path, monkeypatch):
-    """A stand-in engine proves the process boundary works without ziptastic installed."""
+    """A stand-in engine proves the process boundary works without ziptastic installed.
+
+    The stand-in is Python, not a shell script: a `#!/bin/sh` file is not runnable
+    on Windows at all, and the boundary being tested — spawn, wait, move the
+    output — has nothing to do with which language is on the other side.
+    """
     fake = _stand_in_engine(tmp_path)
     fake.write_text(
-        "#!/bin/sh\n"
-        "set -e\n"
-        "src=\"$2\"\n"
-        "case \"$1\" in\n"
-        "  c) if [ -d \"$src\" ]; then out=\"${src%/}.dr\"; tar -cf - -C \"$src\" . | gzip -9 > \"$out\";\n"
-        "     else out=\"$src.dr\"; gzip -9 < \"$src\" > \"$out\"; fi ;;\n"
-        "  *) exit 2 ;;\n"
-        "esac\n"
-        "echo compressed\n"
+        f"#!{sys.executable}\n"
+        "import gzip, sys\n"
+        "verb, src = sys.argv[1], sys.argv[2]\n"
+        "if verb != 'c':\n"
+        "    sys.exit(2)\n"
+        "open(src + '.dr', 'wb').write(gzip.compress(open(src, 'rb').read(), 9))\n"
+        "print('compressed')\n"
     )
-    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    if os.name != "nt":
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     # os.pathsep, not ":": on Windows the separator is ";" and a ":" joined PATH is
     # one bogus entry, so shutil.which finds nothing.
     monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
