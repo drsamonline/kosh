@@ -242,7 +242,8 @@ def pack_with_engine(engine: str, inputs: list[str], out: str,
             shutil.copy2(source, staged)
         try:
             completed = subprocess.run(  # noqa: S603 - fixed argv, resolved binary
-                [exe, verb, staged], cwd=work, capture_output=True, text=True, timeout=6 * 3600,
+                [exe, verb, staged], cwd=work, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=6 * 3600,
             )
         except OSError as exc:
             raise KoshError(f"could not run {binary}: {exc}") from exc
@@ -318,7 +319,8 @@ def unpack_with_engine(engine: str, stream: str, dest: str,
         shutil.copy2(source, staged)
         try:
             completed = subprocess.run(  # noqa: S603 - fixed argv, resolved binary
-                [exe, "d", staged], cwd=work, capture_output=True, text=True, timeout=6 * 3600,
+                [exe, "d", staged], cwd=work, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=6 * 3600,
             )
         except OSError as exc:
             raise KoshError(f"could not run {binary}: {exc}") from exc

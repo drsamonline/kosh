@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import struct
+import subprocess
 import sys
 
 import pytest
@@ -113,23 +114,45 @@ def test_chce_header_is_parsed():
     assert parsed["block_count"] == 7 and parsed["decoder"] == "ziptastic"
 
 
+def _stand_in_engine(tmp_path):
+    """A path that `shutil.which("ziptastic")` finds on this platform.
+
+    On POSIX that is a script with a shebang. On Windows a shebang script is not
+    executable at all: the file needs an extension from PATHEXT, so the script is
+    `ziptastic.py` and the thing on PATH is `ziptastic.cmd` that calls it.
+    """
+    directory = tmp_path / "bin"
+    directory.mkdir()
+    if os.name == "nt":
+        script = directory / "ziptastic.py"
+        shim = directory / "ziptastic.cmd"
+        shim.write_text(f'@"{sys.executable}" "%~dp0ziptastic.py" %*\r\n', encoding="utf-8")
+        return script
+    return directory / "ziptastic"
+
+
 def test_engine_pack_spawns_a_binary(tmp_path, monkeypatch):
-    """A stand-in engine proves the process boundary works without ziptastic installed."""
-    fake = tmp_path / "bin" / "ziptastic"
-    fake.parent.mkdir()
+    """A stand-in engine proves the process boundary works without ziptastic installed.
+
+    The stand-in is Python, not a shell script: a `#!/bin/sh` file is not runnable
+    on Windows at all, and the boundary being tested — spawn, wait, move the
+    output — has nothing to do with which language is on the other side.
+    """
+    fake = _stand_in_engine(tmp_path)
     fake.write_text(
-        "#!/bin/sh\n"
-        "set -e\n"
-        "src=\"$2\"\n"
-        "case \"$1\" in\n"
-        "  c) if [ -d \"$src\" ]; then out=\"${src%/}.dr\"; tar -cf - -C \"$src\" . | gzip -9 > \"$out\";\n"
-        "     else out=\"$src.dr\"; gzip -9 < \"$src\" > \"$out\"; fi ;;\n"
-        "  *) exit 2 ;;\n"
-        "esac\n"
-        "echo compressed\n"
+        f"#!{sys.executable}\n"
+        "import gzip, sys\n"
+        "verb, src = sys.argv[1], sys.argv[2]\n"
+        "if verb != 'c':\n"
+        "    sys.exit(2)\n"
+        "open(src + '.dr', 'wb').write(gzip.compress(open(src, 'rb').read(), 9))\n"
+        "print('compressed')\n"
     )
-    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    if os.name != "nt":
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    # os.pathsep, not ":": on Windows the separator is ";" and a ":" joined PATH is
+    # one bogus entry, so shutil.which finds nothing.
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
 
     src = tmp_path / "input.txt"
     src.write_bytes(b"engine boundary test\n" * 500)
@@ -198,8 +221,7 @@ def test_engine_unpack_is_the_mirror_of_engine_pack(tmp_path, monkeypatch):
     stand-in writes a real 16-byte CHCE v8 header (one-byte varints) and gzips the
     payload, so the size check against true_size has something to check.
     """
-    fake = tmp_path / "bin" / "ziptastic"
-    fake.parent.mkdir()
+    fake = _stand_in_engine(tmp_path)
     fake.write_text(
         f"#!{sys.executable}\n"
         "import gzip, sys\n"
@@ -216,7 +238,9 @@ def test_engine_unpack_is_the_mirror_of_engine_pack(tmp_path, monkeypatch):
         "    sys.exit(2)\n"
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    # os.pathsep, not ":": on Windows the separator is ";" and a ":" joined PATH is
+    # one bogus entry, so shutil.which finds nothing.
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
 
     src = tmp_path / "input.txt"
     src.write_bytes(b"engine boundary\n" * 5)   # 80 bytes
@@ -325,3 +349,23 @@ def test_a_trailer_that_disagrees_with_the_header_is_refused(tmp_path):
     path.write_bytes(bytes(data))
     with pytest.raises(KoshError, match="header says"):
         engine.read_chce_trailer(str(path))
+
+
+# --- CT-1: the console encoding Windows actually uses -------------------------
+
+def test_doctor_survives_a_legacy_console_codepage():
+    """Windows consoles default to a legacy codepage; the UI is UTF-8.
+
+    `kosh doctor` died on windows-latest with
+    `UnicodeEncodeError: 'charmap' codec can't encode character '\\u2713'`.
+    Reproducing it here means it cannot come back unnoticed: run the real CLI with
+    PYTHONIOENCODING set to cp1252 and require a clean exit.
+    """
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
+    completed = subprocess.run(
+        [sys.executable, "-m", "kosh.cli", "doctor"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=env, timeout=120,
+    )
+    assert "UnicodeEncodeError" not in (completed.stderr or ""), completed.stderr
+    assert completed.returncode == 0, completed.stderr or completed.stdout

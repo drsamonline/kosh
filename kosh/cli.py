@@ -32,6 +32,28 @@ from .core import splitjoin
 from .core import verify as verify_mod
 from .core.util import KoshError, human_size, parse_size
 
+def _utf8_output() -> None:
+    """Make stdout and stderr UTF-8 before anything is printed.
+
+    The UI is UTF-8 — a tick, a cross, an arrow — and a Windows console defaults to
+    a legacy codepage where those are not encodable, so `kosh doctor` died with
+    `UnicodeEncodeError: 'charmap' codec can't encode character '\u2713'`. Found by
+    running the suite on windows-latest (CT-1); reproducible anywhere with
+    `PYTHONIOENCODING=cp1252`.
+
+    `errors="replace"` rather than strict: a console that cannot render a glyph
+    should print a placeholder, not end the command.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # a captured stream in a test harness
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):  # pragma: no cover - stream already detached
+            pass
+
+
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
@@ -757,6 +779,7 @@ def version():
 
 
 def main() -> None:  # pragma: no cover
+    _utf8_output()
     try:
         app()
     except KoshError as exc:

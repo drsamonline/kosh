@@ -125,10 +125,21 @@ jobs:
           PY
 
   test:
-    runs-on: ubuntu-latest
+    # CT-1 and CT-2: the same suite on Windows and macOS. The risk is not Python —
+    # it is `atomic_write` + `os.replace` on a file another process holds open, and
+    # path and mode handling, none of which Linux can prove.
+    #
+    # `shell: bash` because several steps are POSIX shell: GitHub ships bash on all
+    # three runners, and the alternative is maintaining two copies of every check.
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
