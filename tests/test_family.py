@@ -436,3 +436,43 @@ def test_every_command_the_readme_lists_is_registered():
     }
     missing = expected - registered
     assert not missing, f"commands missing from the CLI: {sorted(missing)}"
+
+
+# --- EN-3: the gain estimate -------------------------------------------------
+
+def test_estimate_gain_is_none_without_an_engine(monkeypatch, tmp_path):
+    payload = tmp_path / "big.txt"
+    payload.write_bytes(b"data\n" * 1000)
+    monkeypatch.setenv("PATH", "/nonexistent")
+    assert engine.estimate_gain(str(payload)) is None
+
+
+def test_estimate_gain_uses_the_engine_on_a_middle_sample(tmp_path, monkeypatch):
+    """The estimate must be the engine's answer, on a slice, extrapolated by size."""
+    fake = _stand_in_engine(tmp_path)
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import gzip, sys\n"
+        "src = sys.argv[2]\n"
+        "data = open(src, 'rb').read()\n"
+        "open(src + '.dr', 'wb').write(gzip.compress(data, 9))\n"
+    )
+    if os.name != "nt":
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
+
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"compress me, i am repetitive. " * 200_000)  # 5.6 MB
+    estimate = engine.estimate_gain(str(payload), sample_bytes=1 << 20)
+
+    assert estimate is not None
+    assert estimate["engine"] == "ziptastic"
+    assert estimate["sample_bytes"] == 1 << 20
+    assert estimate["raw_size"] == len(b"compress me, i am repetitive. ") * 200_000
+    # A middle slice, not the front.
+    assert estimate["sample_offset"] > 0
+    # Extrapolated by size: the prediction is the sample ratio applied to the file.
+    # `sample_ratio` is rounded to six places for display, so allow that rounding.
+    expected = estimate["sample_ratio"] * estimate["raw_size"]
+    assert abs(estimate["predicted_size"] - expected) <= max(2.0, estimate["raw_size"] * 1e-5)
+    assert 0 < estimate["predicted_size"] < estimate["raw_size"]

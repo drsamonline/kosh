@@ -14,6 +14,7 @@ Kosh drives it across a process boundary instead of reimplementing it.
 
 ```bash
 kosh engines                                 # which CHCE engines are here, and their versions
+kosh scan photo.raw                          # would the engine help? answered from a sample
 kosh optimize photos/ --level 2 --strip      # PNG/ZIP/GZIP/JPEG, losslessly smaller
 kosh pack project/ -o project.kosh           # verified container
 kosh split backup.img --size 700M -o parts/  # parts that prove themselves

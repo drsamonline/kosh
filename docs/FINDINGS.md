@@ -118,3 +118,28 @@ footer and the table of contents.
 - The web UI has no authentication because it binds to loopback. Binding it to
   `0.0.0.0` is possible and would be unsafe; the flag exists, the warning does
   not.
+
+## 7. The gain estimator (EN-3)
+
+`kosh scan` answers "would the engine help?" before the time is spent. It takes a
+1 MiB slice from the **middle** of the file — a tar's first megabyte is headers, a
+log's first megabyte is the least representative part of it — compresses that slice
+with the engine itself, and extrapolates by size. An estimate from a different
+codec would be a guess wearing the engine's name.
+
+Measured against `ziptastic 1.4.2` at its default level, full file versus estimate:
+
+| file | raw | predicted | actual | error |
+| --- | --- | --- | --- | --- |
+| `prose.txt` | 911,564 | 81,473 | 81,473 | +0.0% |
+| `records.csv` | 1,184,607 | 229,858 | 231,440 | −0.7% |
+| `service.log` | 3,557,560 | 155,540 | 152,259 | +2.2% |
+| `noise.bin` | 400,000 | 400,108 | 400,108 | +0.0% |
+
+Worst case 2.2%, inside the ±10% the roadmap asked for. The estimate costs one
+subprocess on a megabyte: 1.5 s for the prose file against 8 s for the full run,
+and the gap widens with file size, which is the point.
+
+A first attempt used `lzma` at preset 6 on a front-of-file sample as a cheap proxy
+and was wrong by +35.5% on prose and −19.7% on the log. Recorded because the
+plausible method was the inaccurate one.

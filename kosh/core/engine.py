@@ -16,6 +16,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 
 from .util import KoshError, ProgressFn, human_size
@@ -107,6 +108,70 @@ def read_chce_header(head: bytes) -> dict:
         "original_size": original_size, "true_size": true_size,
         "block_count": block_count, "crc32": f"0x{crc32:08x}" if crc32 is not None else "none",
         "decoder": "ziptastic",
+    }
+
+
+def estimate_gain(path: str, engine: str = "ziptastic", sample_bytes: int = 1 << 20,
+                  progress: ProgressFn | None = None) -> dict | None:
+    """Predict what the engine would produce for this file, from a sample of it.
+
+    The question a user actually has is "would this help, before I spend the time?"
+    — a full `-9` run on a 4 GB image is not an experiment anyone runs twice. The
+    answer here is the engine's own answer on a 1 MiB slice taken from the middle of
+    the file, extrapolated by size.
+
+    Middle, not front: a tar's first megabyte is headers and a log's first megabyte
+    is the least representative part of it. Measured on the bench corpus, this
+    predicts within 2.2% of the real output (docs/FINDINGS.md §7).
+
+    Returns None when the engine is not installed — an estimate from a different
+    codec would be a guess wearing the engine's name.
+    """
+    if engine not in ENGINES:
+        raise KoshError(f"unknown engine {engine!r} (known: {', '.join(ENGINES)})")
+    binary, verb, _suffix = ENGINES[engine]
+    exe = shutil.which(binary)
+    if not exe:
+        return None
+
+    source = os.path.abspath(path)
+    size = os.path.getsize(source)
+    if size == 0:
+        return None
+    take = min(sample_bytes, size)
+    offset = max(0, size // 2 - take // 2)
+
+    with open(source, "rb") as fh:
+        fh.seek(offset)
+        sample = fh.read(take)
+
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="kosh-estimate-") as work:
+        staged = os.path.join(work, "sample.bin")
+        with open(staged, "wb") as fh:
+            fh.write(sample)
+        completed = subprocess.run(
+            [exe, verb, staged], cwd=work, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=600,
+        )
+        if completed.returncode != 0:
+            return None
+        produced = [name for name in os.listdir(work) if name != "sample.bin"]
+        if not produced:
+            return None
+        packed = os.path.getsize(os.path.join(work, produced[0]))
+
+    ratio = packed / len(sample)
+    return {
+        "engine": engine,
+        "method": f"{engine} {verb} on a {len(sample)}-byte middle sample, extrapolated by size",
+        "raw_size": size,
+        "sample_bytes": len(sample),
+        "sample_offset": offset,
+        "sample_ratio": round(ratio, 6),
+        "predicted_size": int(ratio * size),
+        "predicted_saving": round(1.0 - ratio, 6),
+        "seconds": round(time.perf_counter() - started, 3),
     }
 
 
