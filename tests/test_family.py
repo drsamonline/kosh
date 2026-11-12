@@ -369,3 +369,50 @@ def test_doctor_survives_a_legacy_console_codepage():
     )
     assert "UnicodeEncodeError" not in (completed.stderr or ""), completed.stderr
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+# --- EN-6: the engines command and the version probe -------------------------
+
+def test_probe_version_is_none_without_the_engine(monkeypatch):
+    monkeypatch.setenv("PATH", "/nonexistent")
+    assert engine.probe_version("ziptastic") is None
+    assert engine.probe_version("no-such-engine") is None
+
+
+def test_probe_version_reads_the_engines_own_answer(tmp_path, monkeypatch):
+    """Presence is half the answer; the version is the half that matters."""
+    fake = _stand_in_engine(tmp_path)
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "if sys.argv[1] != 'version':\n"
+        "    sys.exit(2)\n"
+        "print('ziptastic 9.9.9 (CHCE format v8)')\n"
+    )
+    if os.name != "nt":
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
+    assert engine.probe_version("ziptastic") == "ziptastic 9.9.9 (CHCE format v8)"
+
+
+def test_probe_version_survives_an_engine_that_answers_nothing(tmp_path, monkeypatch):
+    fake = _stand_in_engine(tmp_path)
+    fake.write_text(f"#!{sys.executable}\nimport sys\nsys.exit(3)\n")
+    if os.name != "nt":
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
+    assert engine.probe_version("ziptastic") is None
+
+
+def test_engines_command_lists_every_known_engine():
+    from typer.testing import CliRunner
+
+    from kosh.cli import app
+
+    result = CliRunner().invoke(app, ["engines", "--json"])
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.output)
+    names = {row["engine"] for row in rows}
+    assert names == set(engine.ENGINES)
+    for row in rows:
+        assert set(row) >= {"engine", "available", "path", "version", "suffix"}

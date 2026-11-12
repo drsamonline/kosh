@@ -773,6 +773,48 @@ def ui(
 
 
 @app.command()
+@app.command("engines")
+@handle
+def engines(as_json: bool = typer.Option(False, "--json")):
+    """List the CHCE engines Kosh can drive, with their versions.
+
+    Presence alone is the least useful half of the answer: a 1.2.0 binary and a
+    1.4.2 binary both exist. The version comes from the engine's own `version`
+    verb, and a failure to answer is reported as unknown rather than as absent.
+    """
+    rows = []
+    for info in engine_mod.find_engines():
+        binary, verb, suffix = engine_mod.ENGINES[info.name]
+        rows.append({
+            "engine": info.name,
+            "binary": binary,
+            "available": info.available,
+            "path": info.path,
+            "version": engine_mod.probe_version(info.name) if info.available else None,
+            "compress_verb": verb,
+            "suffix": suffix,
+        })
+    if as_json:
+        _emit(rows, True)
+        return
+
+    table = Table(title="CHCE engines", header_style="bold cyan")
+    for column in ("engine", "available", "version", "path", "suffix"):
+        table.add_column(column, overflow="fold")
+    for row in rows:
+        table.add_row(
+            row["engine"],
+            "yes" if row["available"] else "no",
+            row["version"] or ("-" if not row["available"] else "unknown"),
+            row["path"] or "-",
+            row["suffix"],
+        )
+    console.print(table)
+    if not any(row["available"] for row in rows):
+        console.print("  [dim]no engine on PATH — native codecs are used; install one from "
+                      "github.com/drsamonline/ziptastic to drive it[/]")
+
+
 def version():
     """Print the version."""
     console.print(f"kosh {__version__}")

@@ -201,6 +201,8 @@ family, not a preference of the author.
   `macos-latest` as well as Ubuntu, six jobs. The first Windows run found three
   real defects: `kosh doctor` died on a legacy codepage, the engine's output was
   decoded with the locale encoding, and the stand-in engine was a shell script.
+- **Also done:** **EN-6** — `kosh engines` lists every engine with its path and
+  version, and `doctor` reports the version rather than only presence.
 - **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
   forgets a job when the tab closes, the landing page is not published, and an
   engine stream cannot be listed without decoding it.

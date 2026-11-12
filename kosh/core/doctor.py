@@ -14,6 +14,7 @@ import tempfile
 import time
 
 from . import pack as pack_mod
+from . import engine as engine_mod
 from .engine import find_engines
 from .util import KoshError
 
@@ -85,10 +86,13 @@ def run(quick: bool = False) -> dict:
 
     engines = find_engines()
     for engine in engines:
-        checks.append(_check(
-            f"engine:{engine.name}", engine.available,
-            engine.path or "not on PATH (optional — native codecs are used)",
-        ))
+        # Presence is half the answer; the version is the other half, and it is the
+        # half that decides whether a `.dr` from this machine will open on another.
+        detail = "not on PATH (optional — native codecs are used)"
+        if engine.available:
+            version = engine_mod.probe_version(engine.name)
+            detail = f"{version or 'no version output'} ({engine.path})"
+        checks.append(_check(f"engine:{engine.name}", engine.available, detail))
 
     fatal_failure = any(not c["ok"] and c["fatal"] for c in checks)
     return {
