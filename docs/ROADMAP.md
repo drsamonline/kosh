@@ -213,6 +213,10 @@ family, not a preference of the author.
 - **Also done:** **CT-4** — corruption fuzzing. The first run found three ways to
   get a false "intact", including a one-byte edit that switched the manifest-digest
   check off (`docs/FINDINGS.md` §8). 400 mutations per push, 100 000 nightly.
+- **Also done:** **CT-7** — `atomic_write` fsyncs the directory after the rename,
+  so a crash cannot lose the new name while keeping the file. **CT-8** —
+  `unpack --max-size` refuses a payload over a budget, and extraction checks free
+  space before writing anything.
 - **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
   forgets a job when the tab closes, the landing page is not published, and an
   engine stream cannot be listed without decoding it.
@@ -223,4 +227,4 @@ family, not a preference of the author.
   `tools/check-claims.py` fails the build when a number in the README is not in
   `docs/FINDINGS.md`.
 - **Next three, in order:** EN-5 (`run recipe.yaml`), CT-3 (property-based
-  round-trips), CT-5 (`verify --jobs`).
+  round-trips), CT-6 (ZIP64 in `verify`).

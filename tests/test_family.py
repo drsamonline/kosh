@@ -476,3 +476,62 @@ def test_estimate_gain_uses_the_engine_on_a_middle_sample(tmp_path, monkeypatch)
     expected = estimate["sample_ratio"] * estimate["raw_size"]
     assert abs(estimate["predicted_size"] - expected) <= max(2.0, estimate["raw_size"] * 1e-5)
     assert 0 < estimate["predicted_size"] < estimate["raw_size"]
+
+
+# --- CT-7 / CT-8: durability and the extraction budget -----------------------
+
+def test_atomic_write_fsyncs_the_directory(tmp_path, monkeypatch):
+    """The rename is atomic; the directory entry is not. CT-7."""
+    from kosh.core import util as util_mod
+
+    synced = []
+    real_fsync = os.fsync
+
+    def counting_fsync(fd):
+        synced.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(util_mod.os, "fsync", counting_fsync)
+    target = tmp_path / "written.bin"
+    with util_mod.atomic_write(str(target)) as fh:
+        fh.write(b"payload")
+    assert target.read_bytes() == b"payload"
+    # One fsync for the file, one for the directory.
+    assert len(synced) >= 2, f"expected a directory fsync too, saw {len(synced)}"
+
+
+def test_unpack_refuses_a_payload_over_the_budget(tmp_path):
+    """A zip bomb is a legitimate archive; the size is in the TOC, so refuse early."""
+    src = tmp_path / "big.txt"
+    src.write_bytes(b"x" * (2 << 20))
+    container = tmp_path / "big.kosh"
+    pack.pack([str(src)], str(container), codec="zstd", level=3)
+
+    out = tmp_path / "out"
+    with pytest.raises(KoshError, match="over the .* budget"):
+        pack.unpack(str(container), str(out), max_bytes=1 << 20)
+    assert not any(out.glob("**/*")) if out.exists() else True
+
+
+def test_unpack_accepts_a_payload_inside_the_budget(tmp_path):
+    src = tmp_path / "small.txt"
+    src.write_bytes(b"x" * 1000)
+    container = tmp_path / "small.kosh"
+    pack.pack([str(src)], str(container), codec="zstd", level=3)
+    out = tmp_path / "out"
+    result = pack.unpack(str(container), str(out), max_bytes=1 << 20)
+    assert result.entries == 1
+    assert (out / "small.txt").read_bytes() == b"x" * 1000
+
+
+def test_unpack_refuses_when_the_disk_is_too_small(tmp_path, monkeypatch):
+    src = tmp_path / "payload.txt"
+    src.write_bytes(b"x" * 10_000)
+    container = tmp_path / "p.kosh"
+    pack.pack([str(src)], str(container), codec="zstd", level=3)
+
+    import collections
+    usage = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(pack.shutil, "disk_usage", lambda _path: usage(1 << 30, 1 << 30, 100))
+    with pytest.raises(KoshError, match="is free in"):
+        pack.unpack(str(container), str(tmp_path / "out"))

@@ -260,6 +260,8 @@ def unpack(
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip per-file checksum verification."),
     engine: str = typer.Option("auto", "--engine", "-e",
                                help="auto | native | ziptastic | heavenzip. auto detects a CHCE stream."),
+    max_size: Optional[str] = typer.Option(None, "--max-size",
+                                           help="refuse to write more than this (e.g. 500M, 2G)."),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
     as_json: bool = typer.Option(False, "--json"),
 ):
@@ -295,11 +297,13 @@ def unpack(
             f"--engine {engine} is for CHCE streams; {os.path.basename(container)} is a Kosh container"
         )
 
+    budget = parse_size(max_size) if max_size else None
     if quiet or as_json:
-        result = pack_mod.unpack(container, dest, only, verify=not no_verify)
+        result = pack_mod.unpack(container, dest, only, verify=not no_verify, max_bytes=budget)
     else:
         with RichProgress(f"unpacking {os.path.basename(container)}") as prog:
-            result = pack_mod.unpack(container, dest, only, verify=not no_verify, progress=prog)
+            result = pack_mod.unpack(container, dest, only, verify=not no_verify, progress=prog,
+                                     max_bytes=budget)
     payload = {"output_dir": result.output_dir, "entries": result.entries,
                "bytes": result.bytes, "verified": result.verified, "skipped": result.skipped}
     if as_json:

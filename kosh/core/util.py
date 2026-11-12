@@ -106,6 +106,25 @@ def hash_file(path: str, algo: str = "sha256", chunk: int = BLOCK,
 
 
 # --------------------------------------------------------------------------- files
+def fsync_directory(directory: str) -> None:
+    """Flush a directory entry, so a rename survives a crash.
+
+    POSIX only in any meaningful sense: Windows has no directory handle to flush,
+    and `os.open` on a directory fails there, so the failure is swallowed. That is
+    deliberate — a durability nicety must not turn into a write error.
+    """
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:  # pragma: no cover - Windows, or a filesystem without it
+        return
+    try:
+        os.fsync(fd)
+    except OSError:  # pragma: no cover
+        pass
+    finally:
+        os.close(fd)
+
+
 @contextlib.contextmanager
 def atomic_write(path: str, mode: str = "wb"):
     """Write to a sibling temp file and rename on success.
@@ -125,6 +144,11 @@ def atomic_write(path: str, mode: str = "wb"):
             os.fsync(fh.fileno())
         yield_path = tmp
         os.replace(yield_path, path)
+        # The rename is atomic, the directory entry is not: without this fsync a
+        # crash can lose the new name while the file it points at survives — the
+        # worst of both states. Best-effort, because a filesystem that does not
+        # support directory fsync is not a reason to fail the write.
+        fsync_directory(parent)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
