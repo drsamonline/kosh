@@ -204,7 +204,9 @@ family, not a preference of the author.
 - **Also done since:** **CT-10** — `tools/check-version.py` fails the build when
   `pyproject.toml`, `kosh/__init__.py` and the version badge disagree. **EN-4** —
   `kosh info file.dr` reads the v8 trailer and prints the block table, and CI
-  asserts it matches `ziptastic info` block for block.
-- **Next three, in order:** CT-1 (Windows CI), CT-11 (`check-claims.py`), EN-3
-  (the gain estimator). The first is about being *true* elsewhere; the other two
-  are about staying true.
+  asserts it matches `ziptastic info` block for block. **CT-11** —
+  `tools/check-claims.py` fails the build when a number in the README is not in
+  `docs/FINDINGS.md`.
+- **Next three, in order:** CT-1 (Windows CI), CT-9 (PyPI), EN-3 (the gain
+  estimator). The first two are about being installable elsewhere; the third is
+  about answering "would this help?" before spending the time.

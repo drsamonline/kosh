@@ -170,6 +170,10 @@ jobs:
         # that lies.
         run: python tools/check-version.py
 
+      - name: Every quoted number is in FINDINGS.md (CT-11)
+        # docs/FINDINGS.md is the authority for any number quoted anywhere else.
+        run: python tools/check-claims.py
+
       - name: CLI smoke
         run: |
           kosh version
