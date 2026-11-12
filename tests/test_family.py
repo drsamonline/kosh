@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import struct
+import subprocess
 import sys
 
 import pytest
@@ -325,3 +326,22 @@ def test_a_trailer_that_disagrees_with_the_header_is_refused(tmp_path):
     path.write_bytes(bytes(data))
     with pytest.raises(KoshError, match="header says"):
         engine.read_chce_trailer(str(path))
+
+
+# --- CT-1: the console encoding Windows actually uses -------------------------
+
+def test_doctor_survives_a_legacy_console_codepage():
+    """Windows consoles default to a legacy codepage; the UI is UTF-8.
+
+    `kosh doctor` died on windows-latest with
+    `UnicodeEncodeError: 'charmap' codec can't encode character '\\u2713'`.
+    Reproducing it here means it cannot come back unnoticed: run the real CLI with
+    PYTHONIOENCODING set to cp1252 and require a clean exit.
+    """
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
+    completed = subprocess.run(
+        [sys.executable, "-m", "kosh.cli", "doctor"],
+        capture_output=True, text=True, env=env, timeout=120,
+    )
+    assert "UnicodeEncodeError" not in (completed.stderr or ""), completed.stderr
+    assert completed.returncode == 0, completed.stderr or completed.stdout
