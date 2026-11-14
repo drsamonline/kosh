@@ -21,7 +21,8 @@ from .util import KoshError, ProgressFn, hash_file, human_size
 TAR_EXT = (".tar", ".tar.gz", ".tgz", ".tar.zst", ".tzst", ".tar.xz")
 
 
-def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> dict:
+def verify(path: str, deep: bool = True, progress: ProgressFn | None = None,
+           jobs: int | None = None) -> dict:
     """Dispatch on the real file type, not the extension."""
     path = os.path.abspath(path)
     if not os.path.exists(path):
@@ -33,7 +34,7 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None) -> 
         head = fh.read(64)
 
     if head.startswith(pack_mod.START_MAGIC):
-        result = pack_mod.verify_container(path, deep=deep, progress=progress)
+        result = pack_mod.verify_container(path, deep=deep, progress=progress, jobs=jobs)
         return {
             "path": path, "kind": "kosh", "ok": result.ok, "entries": result.entries,
             "bytes": result.bytes, "manifest_verified": result.manifest_verified,

@@ -217,6 +217,9 @@ family, not a preference of the author.
   so a crash cannot lose the new name while keeping the file. **CT-8** —
   `unpack --max-size` refuses a payload over a budget, and extraction checks free
   space before writing anything.
+- **Also done:** **CT-5** — `verify --jobs` verifies entries in a thread pool; 27% at two
+  threads on this machine, and a test that a parallel run reports the same problems in the
+  same order as a serial one (`docs/FINDINGS.md` §9).
 - **Known gaps, honestly:** Zopfli is the slow path on anything above 1 MB, the UI
   forgets a job when the tab closes, the landing page is not published, and an
   engine stream cannot be listed without decoding it.

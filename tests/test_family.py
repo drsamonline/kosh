@@ -541,3 +541,43 @@ def test_unpack_refuses_when_the_disk_is_too_small(tmp_path, monkeypatch):
     monkeypatch.setattr(pack.shutil, "disk_usage", lambda _path: usage(1 << 30, 1 << 30, 100))
     with pytest.raises(KoshError, match="is free in"):
         pack.unpack(str(container), str(tmp_path / "out"))
+
+
+# --- CT-5: parallel verification ---------------------------------------------
+
+def _many_file_container(tmp_path, count=12):
+    src = tmp_path / "files"
+    src.mkdir()
+    for i in range(count):
+        (src / f"f{i:02d}.txt").write_bytes((b"line of text %d\n" % i) * 2000)
+    container = tmp_path / "many.kosh"
+    pack.pack([str(src)], str(container), codec="zstd", level=3)
+    return container
+
+
+def test_parallel_verify_agrees_with_serial(tmp_path):
+    container = _many_file_container(tmp_path)
+    serial = pack.verify_container(str(container), deep=True, jobs=1)
+    parallel = pack.verify_container(str(container), deep=True, jobs=4)
+    assert serial.ok and parallel.ok
+    assert serial.entries == parallel.entries
+    assert serial.problems == parallel.problems
+
+
+def test_parallel_verify_finds_the_same_damage(tmp_path):
+    """A corrupt entry must be reported identically whether one thread or four."""
+    container = _many_file_container(tmp_path)
+    data = bytearray(container.read_bytes())
+    toc = pack.read_toc(str(container))
+    # Damage the payload of the fifth entry, well past the header and the TOC.
+    entry = [e for e in toc["entries"] if e["type"] == "file"][5]
+    offset = entry["blocks"][0][0] + 8
+    data[offset] ^= 0xFF
+    broken = tmp_path / "broken.kosh"
+    broken.write_bytes(bytes(data))
+
+    serial = pack.verify_container(str(broken), deep=True, jobs=1)
+    parallel = pack.verify_container(str(broken), deep=True, jobs=4)
+    assert not serial.ok and not parallel.ok
+    assert serial.problems == parallel.problems
+    assert any("decompress" in p or "hash" in p for p in serial.problems)

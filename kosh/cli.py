@@ -580,10 +580,12 @@ def scan(
 def verify(
     target: str = typer.Argument(..., help="A .kosh container, split manifest, zip or tar."),
     quick: bool = typer.Option(False, "--quick", help="Check structure only; do not decompress."),
+    jobs: Optional[int] = typer.Option(None, "--jobs", "-j",
+                                       help="Entries to verify at once (default: min(4, cores))."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Prove an artefact is intact, without extracting it."""
-    result = verify_mod.verify(target, deep=not quick)
+    result = verify_mod.verify(target, deep=not quick, jobs=jobs)
     if as_json:
         _emit(result, True)
         raise typer.Exit(0 if result["ok"] else 1)
