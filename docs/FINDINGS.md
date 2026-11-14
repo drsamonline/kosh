@@ -162,3 +162,28 @@ found:
 Exhaustive single-bit sweep on a 461-byte container — 3 688 mutations, every bit of
 every byte — now refuses or accepts-with-identical-structure in all of them. The
 random fuzzer runs 400 mutations on every push and 100 000 nightly.
+
+## 9. Parallel verification (CT-5)
+
+`verify` now verifies entries in a thread pool. Measured on this machine (2 cores), an
+8-entry container of 3.3 MB files each:
+
+| jobs | wall time |
+| --- | --- |
+| 1 | 48 ms |
+| 2 | **35 ms** |
+| 4 | 39 ms |
+| 8 | 63 ms |
+
+Two threads buy 27%; beyond four the thread overhead is larger than the work it shares.
+The default is therefore `min(4, cpu_count())` rather than the eight the other code paths
+use, and `--jobs` is there for the case that wants more.
+
+The measured win is modest because zstd releases the GIL only for the decompression itself,
+and the hashing — which is most of the work on already-compressed data — does not. A
+process pool would fix that and would also pay the cost of copying every block across a
+pipe; not attempted, because the ceiling here is a few tens of milliseconds.
+
+The property that matters is not speed: a parallel verifier must report **the same problems
+in the same order** as a serial one. Two tests assert exactly that, one on a clean container
+and one with a deliberately corrupted entry.
