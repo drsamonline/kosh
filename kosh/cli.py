@@ -581,7 +581,7 @@ def verify(
     target: str = typer.Argument(..., help="A .kosh container, split manifest, zip or tar."),
     quick: bool = typer.Option(False, "--quick", help="Check structure only; do not decompress."),
     jobs: Optional[int] = typer.Option(None, "--jobs", "-j",
-                                       help="Entries to verify at once (default: up to 8)."),
+                                       help="Entries to verify at once (default: min(4, cores))."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Prove an artefact is intact, without extracting it."""
