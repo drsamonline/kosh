@@ -7,3 +7,4 @@ dist/
 .venv/
 *.kosh
 .hypothesis/
+examples/recipes/*.manifest.json

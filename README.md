@@ -19,6 +19,7 @@ kosh optimize photos/ --level 2 --strip      # PNG/ZIP/GZIP/JPEG, losslessly sma
 kosh pack project/ -o project.kosh           # verified container
 kosh split backup.img --size 700M -o parts/  # parts that prove themselves
 kosh verify project.kosh                     # is it intact? (no extraction)
+kosh run recipe.yaml                         # chain those steps locally, with a manifest
 kosh ui                                      # the same engine in a browser
 ```
 
@@ -153,6 +154,7 @@ Nothing is gated behind it: no accounts, no tracking, no network requests.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the engine is put together |
 | [`docs/FINDINGS.md`](docs/FINDINGS.md) | every measured number, and what was rejected |
 | [`docs/FORMAT.md`](docs/FORMAT.md) | the container, byte by byte |
+| [`docs/RECIPES.md`](docs/RECIPES.md) | `kosh run`: the recipe format, the manifest, and what it refuses |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | every planned enhancement, its exit test and its open decisions |
 | [`CHANGELOG.md`](CHANGELOG.md) | what each version changed |
 

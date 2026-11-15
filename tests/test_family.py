@@ -433,6 +433,7 @@ def test_every_command_the_readme_lists_is_registered():
     expected = {
         "split", "join", "parts", "pack", "unpack", "ls", "optimize", "scan",
         "verify", "info", "doctor", "bench", "ui", "version", "archive", "engines",
+        "run",
     }
     missing = expected - registered
     assert not missing, f"commands missing from the CLI: {sorted(missing)}"
