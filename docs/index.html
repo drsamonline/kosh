@@ -168,5 +168,41 @@
           <a href="https://github.com/drsamonline/kosh/blob/main/PRIVACY.md">privacy</a></span>
   </footer>
 </div>
+<!-- fleet-nav:start -->
+<nav class="fleetnav" aria-label="The CHCE fleet">
+  <div class="fleetnav-wrap">
+    <p class="fleetnav-label">The CHCE fleet</p>
+    <ul>
+      <li><a href="https://drsamonline.github.io/HCS/">HCS</a><span>the vendored source vault</span></li>
+      <li><a href="https://drsamonline.github.io/ziptastic/">ziptastic</a><span>the engine</span></li>
+      <li><a href="https://drsamonline.github.io/heavenzip/">heavenzip</a><span>the orchestrator</span></li>
+      <li><a href="https://drsamonline.github.io/kosh/" aria-current="page"><strong>kosh</strong></a><span>the file workbench — you are here</span></li>
+      <li><a href="https://drsamonline.github.io/lexora/">lexora</a><span>the text canonicaliser</span></li>
+      <li><a href="https://drsamonline.github.io/compfactory/">compfactory</a><span>the rules</span></li>
+    </ul>
+    <p class="fleetnav-label">This repository</p>
+    <ul>
+      <li><a href="https://github.com/drsamonline/kosh/blob/main/NOTICE">NOTICE</a></li>
+      <li><a href="https://github.com/drsamonline/kosh/blob/main/docs/FINDINGS.md">every measured number</a></li>
+      <li><a href="https://github.com/drsamonline/kosh/blob/main/docs/ROADMAP.md">the roadmap</a></li>
+    </ul>
+  </div>
+</nav>
+<style>
+  .fleetnav { margin: 72px auto 0; padding: 26px 24px 34px; max-width: 64rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    color: inherit; font-size: 13px; line-height: 1.55; }
+  .fleetnav-wrap { display: flex; flex-direction: column; gap: 14px; }
+  .fleetnav-label { margin: 0; font-size: 10.5px; letter-spacing: .16em;
+    text-transform: uppercase; opacity: .5; }
+  .fleetnav ul { margin: 0; padding: 0; list-style: none; display: flex;
+    flex-wrap: wrap; gap: 6px 20px; }
+  .fleetnav li { display: flex; align-items: baseline; gap: 7px; }
+  .fleetnav a { color: inherit; text-decoration: none; padding-bottom: 1px;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 32%, transparent); }
+  .fleetnav a:hover { border-bottom-color: currentColor; }
+  .fleetnav span { opacity: .55; font-size: 12px; }
+</style>
+<!-- fleet-nav:end -->
 </body>
 </html>
