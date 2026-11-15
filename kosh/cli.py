@@ -594,6 +594,10 @@ def verify(
     table.add_column("check")
     table.add_column("result", overflow="fold")
     table.add_row("type", result["kind"])
+    if result.get("zip64"):
+        # Say it out loud: a ZIP64 archive read as a classic one reports 65 535
+        # entries however many it holds, and nothing on screen would show it.
+        table.add_row("zip64", "yes — read through the 64-bit records")
     table.add_row("entries", str(result["entries"]))
     table.add_row("bytes", human_size(result["bytes"]))
     if "manifest_verified" in result:

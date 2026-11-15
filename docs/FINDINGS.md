@@ -187,3 +187,33 @@ pipe; not attempted, because the ceiling here is a few tens of milliseconds.
 The property that matters is not speed: a parallel verifier must report **the same problems
 in the same order** as a serial one. Two tests assert exactly that, one on a clean container
 and one with a deliberately corrupted entry.
+
+## 10. ZIP64 in `verify` (CT-6)
+
+A ZIP's end-of-central-directory record stores the entry count in 16 bits. Past
+65 535 entries the writer must set that field to `0xFFFF` and put the real count in
+a ZIP64 record beside it — so a reader that stops at the classic record reports
+65 535 entries for an archive of any size, and reports it as intact without having
+looked at the rest.
+
+`verify` reads ZIP through `zipfile`, which follows the ZIP64 records when they are
+there, so the entry count was already right. What was wrong was that nothing said
+which of the two records had been read, and `--quick` — documented as "structure
+only; do not decompress" — decompressed every entry anyway.
+
+Measured on a 65 536-entry archive of 6 488 162 bytes, built by the test itself
+(`tests/test_zip64.py`, no binary committed), on this machine (2 cores):
+
+| check | wall time | entries reported |
+| --- | --- | --- |
+| `verify` (deep) | 11.7 s | 65 536 |
+| `verify --quick` | 0.8 s | 65 536 |
+
+15× cheaper for the structural check, and the same count. The archive carries the
+ZIP64 end record and a saturated classic record; the test asserts both, so it cannot
+pass on an ordinary zip. A deliberately wrong CRC in one member is still reported as
+damage by the deep path and not by `--quick`, which is what makes the quick path's
+claim honest.
+
+`kosh verify` now prints a `zip64` row when the archive carried the 64-bit records,
+so the count on screen can be trusted as the real one.
