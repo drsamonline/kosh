@@ -187,3 +187,43 @@ pipe; not attempted, because the ceiling here is a few tens of milliseconds.
 The property that matters is not speed: a parallel verifier must report **the same problems
 in the same order** as a serial one. Two tests assert exactly that, one on a clean container
 and one with a deliberately corrupted entry.
+
+## 11. Property-based round-trips (CT-3)
+
+Hand-written tests cover the cases their author thought of. Hypothesis generates
+them instead, against the three properties the project claims:
+
+| property | generated | what varies |
+| --- | --- | --- |
+| split → join, by part count | 2 000 | payload 1–512 B, 2–4 parts |
+| split → join, by part size | 2 000 | payload 2–512 B, chunk 1–256 B, joined from a part file |
+| pack → unpack | 3 000 | 1–2 files with generated names and bytes, `store` and `zstd` |
+| PNG filter matrix | 3 000 | `bpp` 1–4, height 1–8, `stride = bpp × units`, all five filters and the adaptive choice |
+
+Every one asserts the same thing: the bytes that went in come out, and the
+container or manifest verifies on the way.
+
+Measured on this machine (2 cores):
+
+| run | cases | wall time |
+| --- | --- | --- |
+| `pytest` (default) | 1 000 | 24 s |
+| `KOSH_PROPERTY_CASES=full pytest` | 10 000 | 203 s |
+
+Zero failures at both sizes. The per-case cost is about 20 ms and it is almost
+entirely `fsync`: a round-trip here writes parts or container blocks, and
+`atomic_write` flushes each one. That is why the push suite runs a tenth and
+`fuzz.yml` runs the full 10 000 nightly — the same split CT-4 uses for 10⁵
+mutations, and for the same reason.
+
+### What the generator cannot produce, and why
+
+`stride` is generated as a multiple of `bpp`. A PNG's stride is
+`width × channels × depth / 8` and bpp divides it by construction, so any other
+combination is a shape that cannot exist — and `_decode_rows` would fail inside
+its `reshape(-1, bpp)` for the Sub filter rather than round-trip. Generating the
+two independently would produce a failure that says nothing about any real file.
+
+The matrix is otherwise complete: all five filters plus the adaptive per-row
+choice, 1–4 bytes per pixel, one row and eight rows, sub-byte and 16-bit
+geometries among them.
