@@ -1,7 +1,9 @@
 name: fuzz
 
-# CT-4 at full size. The suite runs 400 random mutations on every push; 10⁵ takes
-# about three minutes, which is a job of its own rather than a tax on every PR.
+# The randomised work, at full size. CT-4 runs 400 random mutations on every push
+# and 10⁵ here; CT-3 runs 1 000 generated round-trips on every push and the
+# roadmap's 10 000 here. Both cost minutes, which is why they are a job of their
+# own rather than a tax on every PR.
 #
 # Nightly and on demand. A corruption bug that only appears at 10⁵ samples is
 # exactly the kind that a 400-sample run will keep quiet about for months.
@@ -39,3 +41,11 @@ jobs:
         env:
           KOSH_FUZZ: ${{ inputs.runs || '100000' }}
         run: pytest tests/test_fuzz.py -q
+
+      - name: 10 000 generated round-trips (CT-3), the roadmap's exit test
+        # The push suite runs a tenth of this: every case writes files, and every
+        # write fsyncs, so the full set costs about three and a half minutes. Same
+        # split as the fuzzing above, and for the same reason.
+        env:
+          KOSH_PROPERTY_CASES: full
+        run: pytest tests/test_properties.py -q

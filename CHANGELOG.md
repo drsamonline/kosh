@@ -4,6 +4,13 @@
 
 **Added**
 
+- Property-based round-trip tests with Hypothesis (roadmap CT-3) for split/join
+  by part count and by part size, pack/unpack, and the full PNG filter matrix —
+  five filters plus the adaptive choice, `bpp` 1–4. The push suite generates
+  1 000 cases; `KOSH_PROPERTY_CASES=full` generates the roadmap's 10 000, which
+  `fuzz.yml` runs nightly (`docs/FINDINGS.md` §11).
+- `hypothesis>=6` in the `dev` extras, so `pip install -e ".[dev]"` is still the
+  only setup step.
 - `kosh verify` reports `zip64` (in the table and in `--json`) when the archive
   carried ZIP64 records, so an entry count above 65 535 is visibly the real one
   and not the saturated `0xFFFF` of the classic end record. Tests build a

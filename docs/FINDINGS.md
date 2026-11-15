@@ -217,3 +217,55 @@ claim honest.
 
 `kosh verify` now prints a `zip64` row when the archive carried the 64-bit records,
 so the count on screen can be trusted as the real one.
+
+## 11. Property-based round-trips (CT-3)
+
+Hand-written tests cover the cases their author thought of. Hypothesis generates
+them instead, against the three properties the project claims:
+
+| property | generated | what varies |
+| --- | --- | --- |
+| split → join, by part count | 2 000 | payload 1–512 B, 2–4 parts |
+| split → join, by part size | 2 000 | payload 2–512 B, chunk 1–256 B, joined from a part file |
+| pack → unpack | 3 000 | 1–2 files with generated names and bytes, `store` and `zstd` |
+| PNG filter matrix | 3 000 | `bpp` 1–4, height 1–8, `stride = bpp × units`, all five filters and the adaptive choice |
+
+Every one asserts the same thing: the bytes that went in come out, and the
+container or manifest verifies on the way.
+
+Measured on this machine (2 cores):
+
+| run | cases | wall time |
+| --- | --- | --- |
+| `pytest` (default) | 1 000 | 24 s |
+| `KOSH_PROPERTY_CASES=full pytest` | 10 000 | 206 s |
+
+Zero failures at both sizes. The per-case cost is about 20 ms and it is almost
+entirely `fsync`: a round-trip here writes parts or container blocks, and
+`atomic_write` flushes each one. That is why the push suite runs a tenth and
+`fuzz.yml` runs the full 10 000 nightly — the same split CT-4 uses for 10⁵
+mutations, and for the same reason.
+
+### What the Windows runner found
+
+The first CI run of these properties failed on `windows-latest` and nowhere else.
+The generated case was a single file named `0.`; it came back as `0`. Nothing in
+Kosh had renamed it — Windows drops a trailing dot or space from a filename when
+the file is *created*, so the archive was built from a directory that already said
+`0`. The property now compares against the names the filesystem actually created
+(`source.iterdir()`), which is the only thing a round-trip can be required to
+preserve, and declines the one case no platform can honour: two names that differ
+only by case on a case-insensitive filesystem. Names that are Windows devices
+(`CON`, `NUL`, `LPT1`) are excluded from the generator for the same reason.
+
+### What the generator cannot produce, and why
+
+`stride` is generated as a multiple of `bpp`. A PNG's stride is
+`width × channels × depth / 8` and bpp divides it by construction, so any other
+combination is a shape that cannot exist — and `_decode_rows` would fail inside
+its `reshape(-1, bpp)` for the Sub filter rather than round-trip. Generating the
+two independently would produce a failure that says nothing about any real file.
+
+The matrix is otherwise complete: all five filters plus the adaptive per-row
+choice, 1–4 bytes per pixel, one row and eight rows, sub-byte and 16-bit
+geometries among them.
