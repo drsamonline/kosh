@@ -8,6 +8,14 @@
   carried ZIP64 records, so an entry count above 65 535 is visibly the real one
   and not the saturated `0xFFFF` of the classic end record. Tests build a
   65 536-entry archive in the test itself — no binary in the repository.
+- `kosh run recipe.yaml` (EN-5) — chain `optimize → pack → engine → verify` from a
+  recipe file, locally, with no engine install and no shell script. Every step's
+  operation, arguments, exit status and evidence (output paths, sizes, SHA-256) go
+  into `<recipe>.manifest.json`. A malformed recipe, an unknown operation or an
+  argument the operation does not take is refused before the first step runs; the
+  first failing step stops the run with a non-zero exit and the manifest names it.
+  The recipe format is a deliberately narrow, documented subset of YAML — no new
+  dependency. See `docs/RECIPES.md` and `examples/recipes/`.
 
 **Fixed**
 

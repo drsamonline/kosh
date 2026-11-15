@@ -202,3 +202,7 @@ jobs:
           kosh pack README.md -o /tmp/a.kosh
           kosh verify /tmp/a.kosh
           kosh info /tmp/a.kosh
+          # EN-5: the committed example recipe, run end to end.
+          kosh run examples/recipes/optimize-pack-verify.yaml \
+            --manifest "$RUNNER_TEMP/example.manifest.json"
+          python -c "import json, os; m = json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'example.manifest.json'))); assert m['ok'], m['failure']; assert [s['op'] for s in m['steps']] == ['optimize', 'pack', 'verify'], m['steps']; print('recipe:', [s['status'] for s in m['steps']])"
