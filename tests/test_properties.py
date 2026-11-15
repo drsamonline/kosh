@@ -136,9 +136,15 @@ def test_split_by_size_then_join_is_the_same_bytes(scratch, payload, chunk):
 
 
 # ------------------------------------------------------------------ pack / unpack
+# Windows refuses a handful of names outright — `CON`, `NUL`, `LPT1` and friends
+# are devices, not files — so no property about file names can include them.
+_WINDOWS_DEVICES = {"con", "prn", "aux", "nul",
+                    *(f"com{i}" for i in range(1, 10)),
+                    *(f"lpt{i}" for i in range(1, 10))}
+
 FILE_NAMES = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789._-", min_size=1, max_size=12
-).filter(lambda name: name not in (".", ".."))
+).filter(lambda name: name not in (".", "..") and name.lower() not in _WINDOWS_DEVICES)
 
 
 @given(
@@ -147,6 +153,12 @@ FILE_NAMES = st.text(
 )
 @slow(PACK_CASES)
 def test_pack_then_unpack_is_the_same_tree(scratch, files, codec):
+    # Windows and macOS are case-insensitive: two generated names that differ only
+    # by case are one file on disk, so there is no round-trip to assert. This is
+    # the only example the property declines.
+    if len({name.lower() for name in files}) != len(files):
+        return
+
     case = example_dir(scratch)
     try:
         source = case / "in"
@@ -154,9 +166,18 @@ def test_pack_then_unpack_is_the_same_tree(scratch, files, codec):
         for name, data in files.items():
             (source / name).write_bytes(data)
 
+        # Ask the filesystem what it actually created, and hold kosh to that. A
+        # trailing dot or space in a name is silently dropped by Windows when the
+        # file is created — before kosh sees it — so the name on disk, not the
+        # generated one, is the thing a round-trip can be required to preserve.
+        # (This is how the Windows runner first failed this property: a generated
+        # `0.` came back as `0`, and the filesystem had done the renaming.)
+        stored = {p.name: p.read_bytes() for p in source.iterdir() if p.is_file()}
+        assert stored, "the generator produced no file the filesystem kept"
+
         container = case / "tree.kosh"
         packed = pack.pack([str(source)], str(container), codec=codec)
-        assert packed.entries == len(files)
+        assert packed.entries == len(stored)
 
         result = pack.verify_container(str(container))
         assert result.ok and result.manifest_verified
@@ -164,7 +185,7 @@ def test_pack_then_unpack_is_the_same_tree(scratch, files, codec):
         out = case / "out"
         pack.unpack(str(container), str(out))
         restored = {p.name: p.read_bytes() for p in out.rglob("*") if p.is_file()}
-        assert restored == files
+        assert restored == stored
     finally:
         shutil.rmtree(case, ignore_errors=True)
 
