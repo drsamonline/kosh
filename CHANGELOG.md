@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Added**
+
+- `kosh run recipe.yaml` (EN-5) — chain `optimize → pack → engine → verify` from a
+  recipe file, locally, with no engine install and no shell script. Every step's
+  operation, arguments, exit status and evidence (output paths, sizes, SHA-256) go
+  into `<recipe>.manifest.json`. A malformed recipe, an unknown operation or an
+  argument the operation does not take is refused before the first step runs; the
+  first failing step stops the run with a non-zero exit and the manifest names it.
+  The recipe format is a deliberately narrow, documented subset of YAML — no new
+  dependency. See `docs/RECIPES.md` and `examples/recipes/`.
+
 ## 1.1.0 — 11 November 2026
 
 First release as part of the CHCE family.

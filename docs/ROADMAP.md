@@ -64,7 +64,7 @@ work end to end, and is where the two repositories have to agree on facts.
 | EN-2 | **`kosh unpack --engine ziptastic`** | Packing without unpacking is half a boundary | `pack --engine ziptastic` then `unpack --engine ziptastic` returns the original bytes | M |
 | EN-3 | **`kosh scan` estimates the engine's gain** from a sample (entropy + container type) | "Would ziptastic help?" is the question a user actually has | Prediction within ±10% of the real result on the bench corpus | M |
 | EN-4 | **Full `.dr` header read** (block table), coordinated with ziptastic's `docs/FORMAT.md` | `info` on an engine stream is the natural companion to `info` on a container | `kosh info file.dr` prints blocks and offsets, matching `ziptastic info` | M |
-| EN-5 | **`kosh run recipe.yaml`** — a local pipeline: optimize → pack → engine → verify, with a manifest of steps | heavenzip chains binaries globally; nobody can chain a *local* job | A recipe file reproduces a multi-step run and records each step's evidence | L |
+| EN-5 | **`kosh run recipe.yaml`** — a local pipeline: optimize → pack → engine → verify, with a manifest of steps | heavenzip chains binaries globally; nobody can chain a *local* job | A recipe file reproduces a multi-step run and records each step's evidence | L · **done** |
 | EN-6 | **Engine registry** — `kosh engines list`, version probe, capability report | Two engines exist; a third will | `kosh doctor` shows versions of installed engines, not just presence | S |
 | EN-7 | **Write the boundary down**: `docs/ENGINE_BOUNDARY.md` | "Why doesn't Kosh just compress better?" is the most likely question | Document states what is engine work and what is workbench work, with examples | S |
 
@@ -229,5 +229,11 @@ family, not a preference of the author.
   asserts it matches `ziptastic info` block for block. **CT-11** —
   `tools/check-claims.py` fails the build when a number in the README is not in
   `docs/FINDINGS.md`.
-- **Next three, in order:** EN-5 (`run recipe.yaml`), CT-3 (property-based
-  round-trips), CT-6 (ZIP64 in `verify`).
+- **Also done since:** **EN-5** — `kosh run recipe.yaml` chains `optimize → pack →
+  engine → verify` from a recipe file and writes a manifest holding, per step, the
+  operation, its arguments, its exit status and the evidence it produced (output
+  paths, sizes, SHA-256). A bad recipe is refused before the first step runs; the
+  first failing step stops the run with a non-zero exit and the manifest names it.
+  Format and refusals: `docs/RECIPES.md`.
+- **Next three, in order:** CT-3 (property-based round-trips), CT-6 (ZIP64 in
+  `verify`), EN-2 (the unpack half of the engine boundary).
