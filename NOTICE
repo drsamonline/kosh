@@ -1,0 +1,46 @@
+# NOTICE
+
+kosh is MIT (see `LICENSE`). That covers the files this repository authors:
+`kosh/`, `tests/`, `tools/`, `docs/`, `scripts/`, `examples/` and `pyproject.toml`.
+
+## kosh vendors nothing and links nothing
+
+It drives the CHCE engines across a process boundary, so no engine code is
+compiled into it and no engine licence reaches it. There is no `vendor/`
+directory and nothing under `kosh/` is copied from another project.
+
+## Runtime dependencies
+
+Nine packages are imported at runtime. Their licences are their own; the table
+below was read from each installed package's metadata
+(`importlib.metadata`), not from a project page.
+
+| Package | Licence |
+|---|---|
+| `typer` | MIT |
+| `rich` | MIT |
+| `zstandard` | BSD-3-Clause |
+| `brotli` | MIT |
+| `zopfli` | Apache-2.0 |
+| `numpy` | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| `fastapi` | MIT |
+| `uvicorn` | BSD-3-Clause |
+| `python-multipart` | Apache-2.0 |
+
+Versions are pinned by range in `pyproject.toml`, so the exact set installed
+depends on the environment; the licences above are stable across the versions in
+use, and each package ships its own `LICENSE` in the installed distribution —
+that copy, not this table, is the authority.
+
+Nothing in kosh phones home: the UI server binds to localhost, and the only
+network use in the repository is in development scripts that fetch test corpora.
+
+## Development-only dependencies
+
+`pytest`, `pillow`, `httpx2` and `hypothesis` are in the `dev` extra. They are not
+imported by `kosh/` at runtime and do not ship in the package. `httpx2` is listed
+because starlette's `TestClient` imports it; nothing in `kosh/` imports it.
+
+*Not legal advice. Whether a particular distribution satisfies each dependency's
+terms is a question for a lawyer; the licence text shipped with each package is
+the authority, not this table.*
