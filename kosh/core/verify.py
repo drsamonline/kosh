@@ -91,7 +91,7 @@ def verify(path: str, deep: bool = True, progress: ProgressFn | None = None,
         return _verify_zip(path, progress, deep=deep)
 
     if path.lower().endswith(TAR_EXT):
-        return _verify_tar(path, progress)
+        return _verify_tar(path, progress, deep=deep)
 
     digest = hash_file(path, progress=progress)
     return {
@@ -230,7 +230,20 @@ def _verify_zip(path: str, progress: ProgressFn | None, deep: bool = True) -> di
             "seconds": round(time.perf_counter() - started, 2)}
 
 
-def _verify_tar(path: str, progress: ProgressFn | None) -> dict:
+def _verify_tar(path: str, progress: ProgressFn | None, deep: bool = True) -> dict:
+    """Verify a tar, honouring `deep` the way the zip path does.
+
+    `deep=False` reads the member headers and nothing else — the same contract
+    `verify --quick` states for zip ("structure only; do not decompress"). Before
+    this, tar read every member's data whatever the flag said, so a quick check
+    of a large tarball cost a full decompression.
+
+    What deep verify proves here is weaker than for zip, and the difference is
+    the format's, not this function's: tar has no per-member checksum, so reading
+    a member proves the bytes are there and readable, not that they are the bytes
+    that were written. Zip's deep path can compare a CRC; tar's cannot. The
+    `checked` string says which of the two happened.
+    """
     problems: list[str] = []
     entries = 0
     raw = 0
@@ -241,7 +254,7 @@ def _verify_tar(path: str, progress: ProgressFn | None) -> dict:
             for member in tf:
                 entries += 1
                 raw += member.size
-                if member.isfile():
+                if deep and member.isfile():
                     handle = tf.extractfile(member)
                     if handle is None:
                         problems.append(f"{member.name}: unreadable")
@@ -254,6 +267,8 @@ def _verify_tar(path: str, progress: ProgressFn | None) -> dict:
         problems.append(str(exc))
     return {"path": path, "kind": "tar", "ok": not problems, "entries": entries,
             "bytes": raw, "problems": problems,
+            "checked": "every entry read (no per-member checksum in tar)"
+                       if deep else "headers only",
             "seconds": round(time.perf_counter() - started, 2)}
 
 

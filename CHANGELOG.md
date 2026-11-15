@@ -26,6 +26,14 @@
 
 **Fixed**
 
+- `kosh verify --quick` on a **tar** decompressed every member, the same defect
+  CT-6 fixed for zip: the flag is documented as "structure only; do not
+  decompress". Tar now reads the headers and says `headers only` under `--quick`,
+  and `every entry read (no per-member checksum in tar)` under deep verify. That
+  wording is deliberate — tar carries no per-member checksum, so reading a member
+  proves the bytes are there, not that they are the bytes that were written. Zip's
+  deep path can compare a CRC; tar's cannot.
+
 - `kosh verify --quick` on a ZIP decompressed every entry, against its own
   documentation ("structure only; do not decompress"). It now reads the central
   directory and says `central directory only`; on a 65 536-entry archive that is
