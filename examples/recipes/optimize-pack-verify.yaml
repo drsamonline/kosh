@@ -1,0 +1,24 @@
+# kosh run examples/recipes/optimize-pack-verify.yaml
+#
+# EN-5's shape, over a small sample that ships with the repo: optimize what can be
+# optimized, pack the result into a verified container, then prove the container.
+# Every step's evidence lands in optimize-pack-verify.manifest.json.
+version: 1
+name: optimize-pack-verify
+description: squeeze what can be squeezed, pack it, then prove the container
+
+steps:
+  - op: optimize
+    name: re-deflate the sample
+    paths: [input]
+    level: 2
+
+  - op: pack
+    name: into a verified container
+    paths: [input]
+    out: build/example.kosh
+    codec: zstd
+
+  - op: verify
+    name: prove it
+    target: build/example.kosh

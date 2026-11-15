@@ -28,6 +28,7 @@ from .core import doctor as doctor_mod
 from .core import engine as engine_mod
 from .core import optimize as optimize_mod
 from .core import pack as pack_mod
+from .core import recipe as recipe_mod
 from .core import splitjoin
 from .core import verify as verify_mod
 from .core.util import KoshError, human_size, parse_size
@@ -779,6 +780,57 @@ def bench(
         with open(markdown_out, "w", encoding="utf-8") as fh:
             fh.write(bench_mod.markdown(report) + "\n")
         console.print(f"[green]wrote[/] {markdown_out}")
+
+
+# --------------------------------------------------------------------------- run (EN-5)
+#
+# Its own section, with the decorators on the lines immediately above the def:
+# the trap recorded in docs/ROADMAP.md is that inserting a function above a
+# decorated def can eat the decorator, and `test_every_command_the_readme_lists_
+# is_registered` catches it when it does.
+@app.command("run")
+@handle
+def run(
+    recipe: str = typer.Argument(..., help="A recipe file; see docs/RECIPES.md."),
+    manifest: Optional[str] = typer.Option(None, "--manifest", "-m",
+                                           help="Where to write the manifest "
+                                                "(default: <recipe>.manifest.json)."),
+    cwd: Optional[str] = typer.Option(None, "--cwd",
+                                      help="Resolve the recipe's relative paths here "
+                                           "(default: the recipe's own directory)."),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Run a local pipeline from a recipe file, recording each step's evidence.
+
+    optimize → pack → engine → verify, chained locally, with a manifest that says
+    what each step was asked to do and what it produced. A bad recipe is refused
+    before any step runs; the first failing step stops the run with a non-zero exit
+    and the manifest records which step it was.
+    """
+    parsed = recipe_mod.load_recipe(recipe)
+
+    def announce(record: dict) -> None:
+        if quiet or as_json:
+            return
+        mark = "[green]ok[/]" if record["status"] == "ok" else "[red]failed[/]"
+        label = record["name"] or record["op"]
+        console.print(f"  {record['index']}. {label} [dim]({record['op']})[/] {mark} "
+                      f"[dim]{record['seconds']}s[/]")
+        if record["error"]:
+            console.print(f"     [red]{record['error']}[/]")
+
+    if not (quiet or as_json):
+        console.print(f"[bold]{parsed.label}[/] — {len(parsed.steps)} step(s)")
+
+    result = recipe_mod.run_recipe(parsed, manifest, cwd, on_step=announce)
+    if as_json:
+        _emit(result.manifest, True)
+    elif not quiet:
+        colour = "green" if result.ok else "red"
+        console.print(f"[{colour}]{recipe_mod.summarise(result)}[/]")
+    if not result.ok:
+        raise typer.Exit(1)
 
 
 # --------------------------------------------------------------------------- ui
