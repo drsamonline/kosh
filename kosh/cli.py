@@ -447,8 +447,12 @@ def optimize(
     table.add_column("cut", justify="right", width=5, no_wrap=True)
     table.add_column("note", ratio=3, overflow="ellipsis", no_wrap=True)
     for r in results:
-        if r.kind == "unknown" and not r.changed:
-            table.add_row(os.path.basename(r.path), "[dim]not optimisable[/]", "-", "-",
+        if not optimize_mod.can_optimise(r.kind) and not r.changed:
+            # Name what it is when we know, so the row teaches something. "unknown"
+            # still reads as a plain skip; a named format reads as "we saw an xz
+            # stream and have nothing for it", which is the useful version.
+            label = "not optimisable" if r.kind == "unknown" else f"no optimiser ({r.kind})"
+            table.add_row(os.path.basename(r.path), f"[dim]{label}[/]", "-", "-",
                           "[dim]skipped[/]")
             continue
         note = r.note
