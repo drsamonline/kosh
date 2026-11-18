@@ -3,7 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kosh"
+# The distribution is `zipkosh`: `kosh` on PyPI is LLNL's unrelated data-store tool
+# (v3.6, github.com/LLNL/Kosh). The COMMAND is still `kosh` — see [project.scripts].
+name = "zipkosh"
 version = "1.1.0"
 description = "One toolkit for splitting, squeezing, archiving and inspecting files"
 readme = "README.md"
