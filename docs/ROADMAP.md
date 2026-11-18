@@ -46,7 +46,7 @@ result. No new formats.
 | CT-6 | **ZIP64 in `verify`** | It is passed through today; verify should still read it | `verify` reports intact/entry-count for a >4 GB or >65 535-entry zip | S |
 | CT-7 | **Durability: fsync the directory** after `os.replace` | The rename is atomic, the directory entry is not | A crash test (kill -9 mid-write) never loses the original | S |
 | CT-8 | **Resource guard on extract** — `--max-size`, free-space check | A zip bomb is a legitimate archive | Refuses to write past the budget, with a clear message | S |
-| CT-9 | **Publish to PyPI** (`kosh` if free, else `kosh-toolkit`) | `pip install -e .` is not an install | `pip install kosh` in a clean container, then `kosh doctor` passes | S |
+| CT-9 | **Publish to PyPI** as **`zipkosh`** (`kosh` was taken by LLNL's data-store tool; `zipkosh` verified free 2026-11-18) | `pip install -e .` is not an install | `pip install kosh` in a clean container, then `kosh doctor` passes | S |
 | CT-10 | **Single-source version check in CI** | The fleet's rule; a drifting version string is a lie in the footer | CI fails if `pyproject.toml`, `__init__.py` and the badge disagree | S |
 | CT-11 | **`scripts/check-claims.py`** — assert every README table matches `docs/FINDINGS.md` | ziptastic already has this gate; Kosh's README quotes numbers too | CI fails when a table cell is edited without the measurement | M |
 | CT-12 | **Enable Pages, register in the fleet** | The landing page exists and is not live | `drsamonline.github.io/kosh/` returns 200; dashboard picks the repo up | S |

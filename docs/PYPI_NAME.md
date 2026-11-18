@@ -37,7 +37,16 @@ been on PyPI since before this project existed and is eleven minor versions ahea
    installs a national-lab data-store tool, and someone who has read this project's README will
    reasonably think it is this one.
 
-## What would fix it, and why this file does not decide
+## Decided: the distribution is `zipkosh` (2026-11-18)
+
+The owner chose **`zipkosh`**. It is free on PyPI — `pip index versions zipkosh` finds no
+distribution — and it keeps the `kosh` command, which is what the docs and the CLI use.
+
+`pyproject.toml` now declares `name = "zipkosh"`; `[project.scripts]` still installs `kosh`, and
+the import package is still `kosh`. So `pip install zipkosh` gives you the `kosh` command, which
+is the usual arrangement for a project whose name was taken.
+
+## The candidates that were considered
 
 The distribution name has to change; the `kosh` **command** can stay, since that is what the CLI
 installs and what the docs use. Candidates, in the order they read best:
@@ -48,9 +57,8 @@ installs and what the docs use. Candidates, in the order they read best:
 | `chce-kosh` | matches the `chce` vocabulary the engine already uses |
 | `kosh-cli` | describes what it is, says nothing about CHCE |
 
-**This is a naming decision for the owner, not a technical one**, so nothing here is renamed. The
-change is `name` in `pyproject.toml`, the install line in `README.md`, and the `twine`/`pip`
-references — small, once the name is chosen.
+The change was `name` in `pyproject.toml`, the install line in `README.md`, and this document —
+as expected, small.
 
 ## The state of the two items this was part of
 
