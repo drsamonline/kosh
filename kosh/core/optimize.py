@@ -68,16 +68,78 @@ class OptimizeResult:
 
 
 # --------------------------------------------------------------------------- detect
+# Formats this module can actually re-encode. `sniff` names far more than this; the
+# gap between "what is it" and "what can we do about it" is the whole point of
+# returning a name rather than a boolean.
+OPTIMISABLE = ("png", "gzip", "zip", "jpeg")
+
+# Signatures, in the order they are tested. Every entry below is checked by
+# tests/test_sniff.py against a real file produced by the tool that writes that
+# format — not against a constant copied from a wiki. A signature nobody verified is
+# a guess that will name a file wrongly and send it down the wrong path.
+#
+# `(offset, magic, kind)`: the magic starts at `offset` bytes into the file. Tar is
+# the reason offset exists at all — "ustar" sits at 257.
+SIGNATURES: tuple[tuple[int, bytes, str], ...] = (
+    (0, PNG_SIG, "png"),
+    (0, JPEG_SIG, "jpeg"),
+    (0, b"GIF87a", "gif"),
+    (0, b"GIF89a", "gif"),
+    (0, b"RIFF", "riff"),          # wav, avi, webp share this container
+    (0, b"II*\x00", "tiff"),
+    (0, b"MM\x00*", "tiff"),
+    (0, b"BM", "bmp"),
+    (0, b"%PDF-", "pdf"),
+    (0, b"SQLite format 3\x00", "sqlite"),
+    (0, ZIP_SIG, "zip"),
+    (0, GZIP_SIG, "gzip"),
+    (0, b"BZh", "bzip2"),
+    (0, b"\xfd7zXZ\x00", "xz"),
+    (0, b"\x28\xb5\x2f\xfd", "zstd"),
+    (0, b"\x04\x22\x4d\x18", "lz4"),
+    (0, b"7z\xbc\xaf\x27\x1c", "7z"),
+    (0, b"Rar!\x1a\x07", "rar"),
+    (0, b"\x7fELF", "elf"),
+    (0, b"MZ", "pe"),
+    (0, b"\x00asm", "wasm"),
+    (0, b"fLaC", "flac"),
+    (257, b"ustar", "tar"),
+)
+
+
 def sniff(data: bytes) -> str:
-    if data.startswith(PNG_SIG):
-        return "png"
-    if data.startswith(GZIP_SIG):
-        return "gzip"
-    if data.startswith(ZIP_SIG):
-        return "zip"
-    if data.startswith(JPEG_SIG):
-        return "jpeg"
+    """Name the format by content. Never by extension.
+
+    Returns the format name, or "unknown". The name is deliberately wider than
+    OPTIMISABLE: a caller can say "this is an xz stream and there is no optimiser for
+    it", which is more use than "unsupported format" — the user learns what the file
+    is, and what would need adding.
+    """
+    for offset, magic, kind in SIGNATURES:
+        if data[offset:offset + len(magic)] == magic:
+            # "MZ" is also the start of any DOS-era text file's first two bytes in
+            # principle, so PE gets one more check: a real PE has the e_lfanew offset
+            # and the "PE\0\0" signature it points at.
+            if kind == "pe" and not _is_pe(data):
+                continue
+            return kind
     return "unknown"
+
+
+def _is_pe(data: bytes) -> bool:
+    """True when the MZ header points at a PE signature."""
+    if len(data) < 0x40:
+        return False
+    try:
+        lfanew = int.from_bytes(data[0x3C:0x40], "little")
+    except Exception:
+        return False
+    return 0 <= lfanew < len(data) - 4 and data[lfanew:lfanew + 4] == b"PE\x00\x00"
+
+
+def can_optimise(kind: str) -> bool:
+    """Whether this module has an optimiser for that format."""
+    return kind in OPTIMISABLE
 
 
 # Zopfli's cost grows much faster than linearly with input size: ~20 KB/s on
@@ -526,8 +588,14 @@ def optimize(path: str, level: int = 2, strip: bool = False, force: bool = False
         elif kind == "jpeg":
             new, note = optimize_jpeg(data) if strip else (data, "use --strip for EXIF")
         else:
-            return OptimizeResult(path, "unknown", before, before, False,
-                                  "unsupported format")
+            # Name what it is and what we can do, rather than one word for both. A
+            # user who learns "this is an xz stream" knows why nothing happened and
+            # what would have to be added; "unsupported format" teaches nothing.
+            return OptimizeResult(
+                path, kind, before, before, False,
+                f"detected {kind} — no optimiser for it (supported: {', '.join(OPTIMISABLE)})"
+                if kind != "unknown"
+                else f"unrecognised content (supported: {', '.join(OPTIMISABLE)})")
     except KoshError as exc:
         return OptimizeResult(path, kind, before, before, False, str(exc))
 
