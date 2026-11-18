@@ -100,6 +100,15 @@ SIGNATURES: tuple[tuple[int, bytes, str], ...] = (
     (0, b"7z\xbc\xaf\x27\x1c", "7z"),
     (0, b"Rar!\x1a\x07", "rar"),
     (0, b"\x7fELF", "elf"),
+    # Mach-O, the three other platform binaries. Thin 32/64-bit in both byte orders,
+    # then the universal ("fat") header, which is checked further down because its
+    # magic is shared with a Java class file.
+    (0, b"\xfe\xed\xfa\xce", "macho"),
+    (0, b"\xfe\xed\xfa\xcf", "macho"),
+    (0, b"\xce\xfa\xed\xfe", "macho"),
+    (0, b"\xcf\xfa\xed\xfe", "macho"),
+    (0, b"\xca\xfe\xba\xbe", "macho-fat"),
+    (0, b"\xbe\xba\xfe\xca", "macho-fat"),
     (0, b"MZ", "pe"),
     (0, b"\x00asm", "wasm"),
     (0, b"fLaC", "flac"),
@@ -122,6 +131,15 @@ def sniff(data: bytes) -> str:
             # and the "PE\0\0" signature it points at.
             if kind == "pe" and not _is_pe(data):
                 continue
+            # 0xcafebabe starts a Java class file too. A fat Mach-O puts the number
+            # of architectures right after the magic — a small count; a class file
+            # puts its minor and major versions there, and the smallest major in
+            # existence is 45, so the two cannot be confused by a real file of
+            # either kind. Same discipline as _is_pe: one more check before naming.
+            if kind == "macho-fat":
+                if not _is_fat_macho(data):
+                    continue
+                return "macho"
             return kind
     return "unknown"
 
@@ -135,6 +153,14 @@ def _is_pe(data: bytes) -> bool:
     except Exception:
         return False
     return 0 <= lfanew < len(data) - 4 and data[lfanew:lfanew + 4] == b"PE\x00\x00"
+
+
+def _is_fat_macho(data: bytes) -> bool:
+    """True when a CAFEBABE header is a universal binary, not a Java class file."""
+    if len(data) < 8:
+        return False
+    nfat = int.from_bytes(data[4:8], "big")
+    return 1 <= nfat <= 32
 
 
 def can_optimise(kind: str) -> bool:

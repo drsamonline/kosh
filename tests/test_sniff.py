@@ -109,9 +109,35 @@ def test_pdf_from_a_real_writer() -> None:
     assert sniff(HTML(string="<p>hi</p>").write_pdf()) == "pdf"
 
 
-def test_elf_is_the_running_interpreter() -> None:
+def test_the_running_interpreter_is_named_by_its_content() -> None:
+    """Each platform's own interpreter binary, read as bytes.
+
+    This was `== "elf"`, which is a Linux-only claim dressed as a universal one: it
+    went red on the macOS runner (the table had no Mach-O signature at all, so a real
+    Mach-O came back "unknown") and on the Windows runner (a PE, named correctly, and
+    still failed). The fix is both halves — the signature was missing AND the
+    expectation was wrong — so this asserts what the platform's binary actually is.
+
+    It is also the one test here that reads a REAL Mach-O, produced by the macOS
+    runner's own toolchain: no CI machine can synthesise one from a constant.
+    """
     import sys
-    assert sniff(Path(sys.executable).read_bytes()[:4096]) == "elf"
+    expected = {"linux": "elf", "darwin": "macho", "win32": "pe"}[sys.platform]
+    assert sniff(Path(sys.executable).read_bytes()[:4096]) == expected
+
+
+def test_macho_thin_and_fat_headers() -> None:
+    """The magics, both byte orders, and the CAFEBABE that is NOT always a Mach-O."""
+    thin = [b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf",
+            b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe"]
+    for magic in thin:
+        assert sniff(magic + b"\x00" * 60) == "macho", magic
+    # A fat header carries the architecture count in bytes 4..8.
+    assert sniff(b"\xca\xfe\xba\xbe" + (2).to_bytes(4, "big") + b"\x00" * 60) == "macho"
+    assert sniff(b"\xbe\xba\xfe\xca" + (1).to_bytes(4, "big") + b"\x00" * 60) == "macho"
+    # A Java class file: minor 0, major 52 (Java 8). It must not be called a Mach-O.
+    assert sniff(b"\xca\xfe\xba\xbe" + (0).to_bytes(2, "big")
+                 + (52).to_bytes(2, "big") + b"\x00" * 60) == "unknown"
 
 
 def test_pe_needs_more_than_mz() -> None:

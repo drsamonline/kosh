@@ -171,7 +171,7 @@ jobs:
           echo "badge:     ${badge:-<none>}"
           test -n "$collected"
           test "$collected" = "$badge" || {
-            echo "::error::docs/assets/badge-tests.svg says $badge tests, the suite collects $collected. Regenerate with: python tools/badges.py tests $collected"
+            echo "::error::docs/assets/badge-tests.svg says $badge tests, the suite collects $collected. Regenerate with: python tools/badges.py --tests $collected"
             exit 1
           }
 
