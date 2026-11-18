@@ -95,6 +95,8 @@ speeds, is in [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
 ```bash
 pip install -e .            # core + CLI + web UI
+# not `pip install kosh` — that name on PyPI is LLNL's unrelated data-store tool.
+# See docs/PYPI_NAME.md.
 pip install -e ".[dev]"     # + pytest, pillow
 kosh doctor                 # checks every codec with a live round-trip
 ```
