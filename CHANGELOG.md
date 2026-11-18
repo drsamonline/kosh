@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**Fixed**
+
+- `sniff()` now names **Mach-O**, so a macOS binary is no longer `unknown`. The table
+  had no Mach-O signature at all: thin 32/64-bit in both byte orders are added, plus
+  the universal ("fat") header — and `0xcafebabe` is only called a fat Mach-O when the
+  four bytes after the magic are a plausible architecture count (1–32). A Java class
+  file puts its minor and major versions there, and the lowest major version that
+  exists is 45, so a real file of either kind is never confused. Same discipline as
+  the existing `_is_pe` check.
+- The test that asserted the running interpreter is an ELF is now
+  `test_the_running_interpreter_is_named_by_its_content`, and asserts what the
+  platform's binary actually is (`elf` / `macho` / `pe`). It was a Linux-only claim
+  dressed as a universal one, and it had been red on the macOS and Windows runners —
+  for two different reasons, one of them the missing signature above. It is also the
+  only test that reads a **real** Mach-O, produced by the macOS runner's toolchain.
+- The badge-drift step's own error message told a human to run
+  `python tools/badges.py tests <n>`, which argparse rejects (the flag is `--tests`).
+  A repair instruction that fails when followed is worse than none.
+
+**Changed**
+
+- Test badge regenerated from a real run: **133 passed**.
+
+
 **Added**
 
 - Property-based round-trip tests with Hypothesis (roadmap CT-3) for split/join
