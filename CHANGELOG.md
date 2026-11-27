@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+**Fixed**
+
+- The suite is green on all three runners again. `test_sniff.py` asserted that the
+  running interpreter is `elf` — true on Linux, false on Windows (`pe`) and on macOS
+  (kosh has no Mach-O entry, so `unknown`), so the matrix had been red since
+  2026-11-18 over a test about the machine rather than about the code. The
+  expectation is now the platform's, and macOS skips with that reason stated. The
+  test-count badge was stale at the same time (114 against 132 collected, left behind
+  by the PR that added the signature table), so the badge step would have failed next;
+  it is regenerated.
+
 **Added**
 
 - Property-based round-trip tests with Hypothesis (roadmap CT-3) for split/join

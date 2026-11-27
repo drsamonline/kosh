@@ -109,9 +109,20 @@ def test_pdf_from_a_real_writer() -> None:
     assert sniff(HTML(string="<p>hi</p>").write_pdf()) == "pdf"
 
 
-def test_elf_is_the_running_interpreter() -> None:
+def test_the_running_interpreter_is_sniffed_by_its_own_header() -> None:
+    """The interpreter is a real executable, so kosh must name its format — and that
+    format belongs to the MACHINE, not to kosh.
+
+    This asserted "elf" on every runner, so it was red on Windows ("pe") and macOS
+    ("unknown") from 2026-11-18: nine days of a red suite over a test about the
+    runner rather than about the code. The expectation is the platform's now, and
+    the one platform kosh has no entry for says so instead of pretending it passed.
+    """
     import sys
-    assert sniff(Path(sys.executable).read_bytes()[:4096]) == "elf"
+    expected = {"linux": "elf", "win32": "pe"}.get(sys.platform)
+    if expected is None:
+        pytest.skip("kosh's signature table has no Mach-O entry yet (" + sys.platform + ")")
+    assert sniff(Path(sys.executable).read_bytes()[:4096]) == expected
 
 
 def test_pe_needs_more_than_mz() -> None:
